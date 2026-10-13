@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# livn downloads the network's wiring here on first run (re-downloadable)
+systems/
+
+# trained readouts are rebuilt by the playground (--retrain)...
+*.pkl
+# ...except the XOR one, so fresh clones and hosted copies start instantly
+!playground/saved_demo_xor.pkl
+
+# generated images, except the ones the README uses
+*.png
+!docs/*.png
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

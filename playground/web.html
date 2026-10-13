@@ -1,0 +1,1133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neural Playground</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --line: #e4e7ec; --lane: #f1f3f6;
+    --ink: #111827; --ink-2: #4b5563; --ink-3: #9ca3af;
+    --stim: #2563eb; --stim-soft: rgba(37, 99, 235, .12);
+    --spike: #374151; --spike-soft: rgba(55, 65, 81, .3);
+    --up: #0d9488; --down: #dc2626; --neutral: #e3e6eb;
+    --good: #0d9488; --bad: #dc2626; --train: #0f766e;
+    --shadow: 0 1px 2px rgba(17, 24, 39, .05), 0 4px 14px rgba(17, 24, 39, .04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --card: #171a20; --line: #2a2f38; --lane: #20242b;
+      --ink: #f3f4f6; --ink-2: #c5cad3; --ink-3: #8b919c;
+      --stim: #5b8def; --stim-soft: rgba(91, 141, 239, .18);
+      --spike: #d1d5db; --spike-soft: rgba(209, 213, 219, .3);
+      --up: #22a596; --down: #e5534b; --neutral: #2b3038;
+      --good: #22a596; --bad: #e5534b; --train: #2dd4bf;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 16px 60px; }
+  header h1 { margin: 0; font-size: 30px; letter-spacing: -.01em; font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+  header h1 .task { font-weight: 500; color: var(--ink-2); }
+  .tagline { margin: 6px 0 18px; color: var(--ink-2); font-size: 16px; }
+  .tagline b, .sub b, .why b, .card p b { color: var(--ink); }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); align-items: start; }
+  .card { grid-column: span 12; background: var(--card); border: 1px solid var(--line);
+          border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow); min-width: 0; }
+  .span5 { grid-column: span 5; } .span7 { grid-column: span 7; }
+  .span8 { grid-column: span 8; } .span4 { grid-column: span 4; } .span6 { grid-column: span 6; }
+  @media (max-width: 860px) { .span5, .span7, .span8, .span4, .span6 { grid-column: span 12; } }
+  .card h2 { margin: 0; font-size: 17px; font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+         background: var(--ink); color: var(--card); font-size: 13px; font-weight: 600; flex: none; }
+  .tag { font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; letter-spacing: .01em; }
+  .tag.you { background: var(--stim-soft); color: var(--stim); }
+  .tag.fixed { background: var(--lane); color: var(--ink-2); border: 1px solid var(--line); }
+  .tag.trained { background: color-mix(in srgb, var(--train) 18%, transparent); color: var(--train); }
+  .sub { margin: 6px 0 4px 0; color: var(--ink-2); font-size: 14px; }
+  .why { margin: 8px 0 8px 0; font-size: 13.5px; color: var(--ink-2); border-left: 3px solid var(--stim); padding: 2px 0 2px 10px; }
+  .why::before { content: "Why it matters: "; font-weight: 700; color: var(--ink); }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font-family: inherit; fill: var(--ink-2); }
+  .axis-label { font-size: 12px; }
+  .tick { stroke: var(--line); }
+  .explain { margin: 0 0 12px 0; font-size: 13.5px; color: var(--ink-2); }
+  .explain summary { cursor: pointer; color: var(--stim); font-weight: 600; width: fit-content; }
+  .explain p { margin: 8px 0 0; padding: 10px 14px; background: var(--lane); border-radius: 10px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .linectl { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 8px; }
+  .linectl label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+  .linectl input { flex: 1; min-width: 0; }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 12px; font-size: 12.5px; }
+  .flow span { background: var(--lane); border-radius: 8px; padding: 4px 9px; color: var(--ink-2); }
+  .flow i { color: var(--ink-3); font-style: normal; }
+  .ideas { margin-top: 14px; padding: 12px 16px; border-radius: 10px; background: var(--lane); font-size: 13.5px; color: var(--ink-2); }
+  .ideas h3 { margin: 0 0 6px; font-size: 14px; color: var(--ink); }
+  .ideas ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+  .ideas b { color: var(--ink); }
+  .caption { font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+  .caption b { color: var(--ink); }
+  .empty { color: var(--ink-3); font-size: 14px; padding: 30px 0; text-align: center; }
+
+  /* big picture */
+  .bigpic { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; }
+  @media (max-width: 860px) { .bigpic { grid-template-columns: 1fr; } }
+  .bigpic p { margin: 8px 0; font-size: 14px; color: var(--ink-2); }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0 4px; font-size: 13px; }
+  .chain span { border-radius: 10px; padding: 6px 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); }
+  .chain span small { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .chain .c-you { border-color: var(--stim); } .chain .c-you small { color: var(--stim); }
+  .chain .c-fixed small { color: var(--ink-3); }
+  .chain .c-trained { border-color: var(--train); } .chain .c-trained small { color: var(--train); }
+  .chain i { color: var(--ink-3); font-style: normal; }
+  .ft { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ft td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  .ft td:first-child { white-space: nowrap; }
+
+  /* input */
+  .howto { margin: 4px 0 14px 0; padding: 12px 16px; border-radius: 10px; background: var(--lane);
+           font-size: 13.5px; color: var(--ink-2); display: grid; gap: 6px; }
+  .howto b { color: var(--ink); }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .presets .label { color: var(--ink-2); font-size: 13px; margin-right: 4px; }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px;
+          padding: 6px 14px; font: inherit; font-size: 14px; cursor: pointer; transition: .15s; }
+  .chip:hover { border-color: var(--stim); }
+  .chip.on { background: var(--stim); border-color: var(--stim); color: #fff; }
+  .strength { display: grid; gap: 4px; min-width: 320px; }
+  .strength label { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+  #amp { -webkit-appearance: none; appearance: none; width: 200px; height: 10px; border-radius: 5px; outline: none; }
+  #amp::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--card);
+    border: 3px solid var(--ink); cursor: pointer; }
+  #amp::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--card); border: 3px solid var(--ink); cursor: pointer; }
+  #ampval { padding: 2px 9px; border-radius: 999px; font-size: 12.5px; min-width: 58px; text-align: center; }
+  .ampticks { position: relative; display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); width: 200px; margin-left: auto; margin-right: 68px; }
+  #trainedtick { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .chip small { color: inherit; opacity: .7; margin-left: 6px; }
+  .lane { fill: var(--lane); cursor: crosshair; }
+  .lane:hover { fill: var(--stim-soft); }
+  .pulse { cursor: grab; }
+  .pulse-label { font-size: 11px; fill: var(--ink-2) !important; font-weight: 600; pointer-events: none; }
+  .cursor { stroke: var(--ink); stroke-width: 1.5; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; margin-top: 14px; }
+  .controls label { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 10px; }
+  input[type=range] { accent-color: var(--stim); }
+  
+  .match { flex: 1; min-width: 220px; font-size: 14px; color: var(--ink-2); }
+  .match b { color: var(--ink); }
+  .btn { border: 0; border-radius: 10px; padding: 11px 20px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn.primary { background: var(--ink); color: var(--card); }
+  .btn.primary:disabled { opacity: .55; cursor: wait; }
+  .btn.ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); }
+
+  /* playback bar */
+  .player { position: sticky; top: 8px; z-index: 10; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 12px 16px; border-color: var(--stim); }
+  .player.off { opacity: .55; pointer-events: none; position: static; }
+  .pbtn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--card);
+          color: var(--ink); font-size: 15px; cursor: pointer; display: grid; place-items: center; }
+  .pbtn.main { background: var(--stim); border-color: var(--stim); color: #fff; }
+  #scrub { flex: 1; min-width: 160px; }
+  .clock { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 86px; }
+  .speeds { display: flex; gap: 4px; }
+  .speeds button { border: 1px solid var(--line); background: var(--card); color: var(--ink-2); border-radius: 8px;
+                   padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+  .speeds button.on { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .now { flex-basis: 100%; font-size: 13.5px; color: var(--ink-2); margin-left: 4px; }
+  .now b { color: var(--ink); }
+
+  /* network */
+  .neuron { fill: var(--neutral); }
+  .neuron.fired { fill: var(--spike); opacity: .5; }
+  .neuron.firing { fill: var(--spike); opacity: 1; r: 17; }
+  .electrode { fill: none; stroke: var(--ink-3); stroke-width: 3; }
+  .electrode.used { stroke: var(--stim); stroke-width: 5; }
+  .electrode.zap { fill: var(--stim); }
+  .elabel { font-size: 46px; fill: var(--stim) !important; font-weight: 600; }
+  .spike { stroke: var(--spike); stroke-width: 1.6; opacity: 0; }
+  .spike.shown { opacity: 1; }
+  .band { fill: var(--stim-soft); }
+  .minihead { font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 10px 0 2px; }
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+  .stats b { display: block; font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* decoding / readout / output */
+  .cell { stroke: var(--card); stroke-width: 1.5; }
+  .nowcol { fill: none; stroke: var(--stim); stroke-width: 2.5; }
+  .thresh { stroke: var(--ink-3); stroke-dasharray: 4 4; }
+  .bignum { font-size: 52px; font-weight: 700; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .bigcap { font-size: 12.5px; color: var(--ink-3); margin-top: 4px; }
+  .gauge { position: relative; height: 38px; border-radius: 10px; overflow: hidden; display: flex; margin: 16px 0 6px; }
+  .gauge div { flex: 1; display: grid; place-items: center; font-size: 12px; color: var(--ink-2); }
+  .gauge .z0 { background: color-mix(in srgb, var(--down) 16%, transparent); }
+  .gauge .z1 { background: color-mix(in srgb, var(--up) 16%, transparent); }
+  .needle { position: absolute; top: -4px; bottom: -4px; width: 4px; border-radius: 2px; background: var(--ink);
+            left: 50%; transform: translateX(-2px); }
+  .gauge-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+  .verdict { margin-top: 14px; font-size: 14px; color: var(--ink-2); }
+  .verdict .big { display: block; font-size: 20px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+  .ok { color: var(--good) !important; } .no { color: var(--bad) !important; }
+  .tally { margin-top: 14px; font-size: 13px; color: var(--ink-2); }
+  .history { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .history span { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--lane); color: var(--ink-2); }
+
+  /* story */
+  .story { border-color: var(--stim); }
+  #story ol { margin: 10px 0 0 10px; padding-left: 24px; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); }
+  #story b.ok { color: var(--good); } #story b.no { color: var(--bad); }
+  .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent;
+             border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .beyond { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 10px; }
+  @media (max-width: 860px) { .beyond { grid-template-columns: 1fr; } }
+  .beyond div { background: var(--lane); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; color: var(--ink-2); }
+  .beyond b { display: block; color: var(--ink); margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Neural playground <span class="task" id="taskname"></span></h1>
+    <p class="tagline" data-text="tagline">Send signals into a fixed, untrained network of neurons and watch a simple linear readout
+      turn its response into an answer, one step at a time.</p>
+  </header>
+
+  <div class="grid">
+    <!-- BIG PICTURE -->
+    <section class="card">
+      <h2><span class="num">i</span>The big picture</h2>
+      <p class="why">Zap a dish of neurons, record how they react, and train only a simple readout to turn that reaction into an answer.</p>
+      <details class="explain"><summary>More detail</summary>
+      <div class="bigpic" style="margin-top:8px">
+        <div>
+          <p>A dish of neurons sits on a grid of metal pads called <b>electrodes</b>. Each electrode can <b>zap</b> (make nearby
+            neurons fire) or <b>listen</b> (record their spikes). We write an input in with zaps, let the network react, read the
+            reaction out, and train only a simple model at the end. That's <b>reservoir computing</b>.</p>
+          <div class="chain">
+            <span class="c-you"><small>you</small>task input</span><i>→</i>
+            <span class="c-fixed"><small>fixed</small>bits → zaps</span><i>→</i>
+            <span class="c-fixed"><small>fixed</small><b id="nneurons" style="font-weight:inherit">300</b> neurons</span><i>→</i>
+            <span class="c-fixed"><small>fixed</small>spikes → numbers</span><i>→</i>
+            <span class="c-trained"><small>trained</small>linear regression</span><i>→</i>
+            <span class="c-you"><small>result</small>answer</span>
+          </div>
+        </div>
+        <div>
+          <p><b>Only the linear regression is trained</b> (once, on <span class="ntrain">100</span> example trials). The neurons
+            and the zap/decode rules never change, and nothing learns while you play.</p>
+          <p>Press <i>Send</i>, then use the <b>playback bar</b> to scrub through the trial. Cards follow the signal in order.</p>
+        </div>
+      </div>
+      <div class="ideas">
+        <h3>Things to try</h3>
+        <ul data-text="ideas">
+          <li><b>Load each task input</b> and compare the bursts in the activity chart and raster. Whatever differs between inputs
+            is what the readout can use.</li>
+          <li><b>Move a pulse a few ms earlier or later</b>, then compare the original and your version with <i>Run ×10</i> (step 8).
+            Timing changes how pulses interact in the network.</li>
+          <li><b>Weaken a pulse</b> to 15–20&nbsp;µA (little or no burst: too weak to make neurons fire) or <b>strengthen it</b> past
+            100&nbsp;µA (a bigger burst that reaches more electrodes). The readout only trained at one strength, so expect less reliable answers.</li>
+          <li><b>Move a pulse to another electrode.</b> Different neurons respond first, and the weights were tuned to the original
+            electrode's response, so the answer becomes close to arbitrary.</li>
+          <li><b>Send nothing</b> (Clear, then Send). Only background noise: a few random spikes and no bursts.</li>
+          <li><b>For any change:</b> check step 5 for tall bars in quiet windows, which mean noise swung the answer.</li>
+        </ul>
+      </div>
+      </details>
+    </section>
+
+    <!-- 1. INPUT -->
+    <section class="card">
+      <h2><span class="num">1</span>Input: pulses over time <span class="tag you">you control this</span></h2>
+      <p class="why" data-text="encoding">The neurons never see your input directly, only zaps. Click a task input to see the pulses
+        this task's encoding turns it into.</p>
+      <div class="howto">
+        <div><b>Click a lane</b> to add a pulse · <b>drag</b> to move · <b>click a pulse</b> to select it, then set its strength
+          (color + height = strength) or press Delete.</div>
+        <div data-text="howto" hidden></div>
+      </div>
+      <div class="presets" id="presets"><span class="label">Task inputs:</span></div>
+      <svg id="timeline"></svg>
+      <div class="controls">
+        <div class="strength">
+          <label><span id="amplabel">New pulses</span> <input type="range" id="amp" min="5" max="150" step="5"> <b id="ampval"></b></label>
+          <div class="ampticks"><span>5</span><span id="trainedtick"></span><span>150 µA</span></div>
+        </div>
+        <button class="btn ghost" id="delpulse" style="display:none">Delete pulse</button>
+        <button class="btn ghost" id="clear">Clear</button>
+        <div class="match" id="match"></div>
+        <button class="btn primary" id="run">Send to the neurons →</button>
+      </div>
+    </section>
+
+    <!-- PLAYBACK -->
+    <section class="card player off" id="player">
+      <button class="pbtn" id="restart" title="back to 0 ms">⏮</button>
+      <button class="pbtn main" id="play" title="play / pause">▶</button>
+      <input type="range" id="scrub" min="0" max="60" step="0.1" value="0">
+      <span class="clock" id="clock">0.0 ms</span>
+      <div class="speeds" id="speeds"></div>
+      <div class="now" id="now">Send a pattern, then play, pause, or drag through the trial. Every card follows this clock.</div>
+    </section>
+
+    <!-- STORY -->
+    <section class="card story">
+      <h2><span class="num" style="background:var(--stim)">?</span>What just happened</h2>
+      <div id="story"><p class="sub">Send a pattern and this box walks through each step with your trial's real numbers.</p></div>
+    </section>
+
+    <!-- 2. NETWORK -->
+    <section class="card span5">
+      <h2><span class="num">2</span>The dish, from above <span class="tag fixed">fixed</span></h2>
+      <p class="why">Neurons next to the zapped electrode fire first, then activity spreads through their connections.</p>
+      <details class="explain"><summary>More detail</summary><p>Dots are neurons (excitatory and inhibitory, randomly wired),
+        squares are electrodes 200&nbsp;µm apart (the full array has <span id="nch">128</span>; only those under the dish are drawn).
+        Every electrode listens; the blue ones also zap. The wiring was never trained.</p></details>
+      <svg id="map"></svg>
+      <div class="legend"><span><i style="background:var(--stim)"></i>zapping now</span>
+        <span><i style="background:var(--spike)"></i>firing now</span>
+        <span><i style="background:var(--spike);opacity:.5"></i>fired earlier</span></div>
+    </section>
+    <section class="card span7">
+      <h2><span class="num">2</span>Spikes over time <span class="tag fixed">fixed</span></h2>
+      <p class="why" data-text="raster">Each pulse triggers a burst that dies out within ~10&nbsp;ms, back to a low <b>background</b>
+        level (never zero: there's always some noise). When and where the bursts happen, and how they interact, is what the readout can use.</p>
+      <details class="explain"><summary>More detail</summary><p>One row per neuron (nearest the electrode at the bottom), one tick
+        per spike, blue bands = pulses. A neuron that just fired can't fire again for a moment (it's <i>refractory</i>).
+        Scattered ticks are background noise, which is why no two runs are identical.</p></details>
+      <div class="minihead">Population activity: spikes per ms, all neurons together</div>
+      <svg id="activity"></svg>
+      <div class="minihead">Each neuron's spikes</div>
+      <svg id="raster"></svg>
+      <div class="stats">
+        <div><b id="st-spikes">0</b>spikes so far</div>
+        <div><b id="st-neurons">0</b>neurons fired</div>
+        <div><b id="st-recent">0</b>firing now</div>
+      </div>
+    </section>
+
+    <!-- 3. FINGERPRINT -->
+    <section class="card">
+      <h2><span class="num">3</span>The reservoir's output: a fingerprint of 1,536 numbers <span class="tag fixed">fixed rule</span></h2>
+      <p class="why" id="decsub">Linear regression can't read "spike events", it needs the same list of numbers every trial. So for each of
+        the <span class="nch2">128</span> electrodes we count the spikes it heard in each 5&nbsp;ms window (0–5, 5–10, … 55–60&nbsp;ms):
+        128 × 12 = <b class="nf">1536</b> numbers. This table is <b>where</b> and <b>when</b> the network was active. It says nothing
+        about bits, and it's the only thing the next step ever sees.</p>
+      <div class="flow"><span>spikes</span><i>→</i><span>count per electrode, per 5&nbsp;ms</span><i>→</i><span>128 × 12 table</span><i>→</i>
+        <span>flatten: one list of <b class="nf">1536</b> numbers</span><i>→</i><span>into linear regression (step 4)</span></div>
+      <div id="heat"><div class="empty">Send a pattern to see its fingerprint.</div></div>
+    </section>
+
+    <!-- 4. WEIGHTS ACT ON THE FINGERPRINT -->
+    <section class="card">
+      <h2><span class="num">4</span>How linear regression acts on the fingerprint <span class="tag trained">weights trained once</span></h2>
+      <p class="why">Linear regression has one <b>weight</b> per number: how much one spike at that electrode, in that 5&nbsp;ms window,
+        pushes the answer toward 1 (teal) or 0 (red). Each count × its weight = a <b>vote</b>. Add up every vote plus a start value and
+        you get the <b>score</b>. The weights were learned once from <span class="ntrain">100</span> example trials and never change.</p>
+      <details class="explain"><summary>How were the weights learned?</summary><p>
+        <b>1 · Collect examples.</b> We ran <span class="ntrain">100</span> trials: <span id="trainmix">an equal number of each task
+        input</span>, each with fresh background noise. For every trial we kept two things: its fingerprint (the
+        <b class="nf">1536</b> spike counts from step 3) and its right answer. The neurons were just doing their thing;
+        nothing about them was adjusted.<br><br>
+        <b>2 · Fit the weights.</b> Linear regression looked for one weight per count, plus a start value, so that for every one of those
+        100 trials <i>start + Σ weight × count</i> comes out as close as possible to that trial's right answer. "Close" means the smallest
+        total squared miss (ordinary least squares). There are no rounds or epochs: it's solved in one go, in milliseconds, then frozen.<br><br>
+        <b>3 · What the windows ended up meaning.</b> <span data-text="windows">The windows right after the pulses carry the
+        network's response, so that's where the useful weights should be. Which windows matter, and in which direction, depends on
+        this task's encoding.</span><br><br>
+        <b>4 · Why the grid looks speckled.</b> Windows with no pulses nearby only ever contain random background spikes,
+        so ideally their weights would be about 0. But with <b class="nf">1536</b> weights and only <span class="ntrain">100</span> examples,
+        least squares can also tune weights to fit the particular noise in those 100 trials. That's the scattered red and teal in quiet
+        windows: memorized noise. It's harmless on the training trials but swings the score on new ones (see step 8).</p></details>
+      <div id="weights"><div class="empty">Loading the learned weights…</div></div>
+      <div class="caption" id="wcap"></div>
+      <div class="legend"><span><i style="background:var(--up)"></i>pushes toward 1</span>
+        <span><i style="background:var(--down)"></i>pushes toward 0</span>
+        <span><i style="background:var(--spike)"></i>spike count</span></div>
+    </section>
+
+    <!-- 5. VOTES ADD UP -->
+    <section class="card span8">
+      <h2><span class="num">5</span>Why it gave that answer: the votes, added up <span class="tag trained">trained weights</span></h2>
+      <p class="why">Step 4's votes, summed per 5&nbsp;ms window, left to right. Tall bars decided the answer. Bars right after your
+        pulses mean it used the real response; a tall bar in a quiet window means a stray noise spike swung it.</p>
+      <details class="explain"><summary>More detail</summary><p>Score = <i>start + w₁·f₁ + … + w₁₅₃₆·f₁₅₃₆</i>; each bar here is all
+        the votes from one time window (one column of step 4's vote grid). With more weights than training trials, plain linear
+        regression over-trusts rare noise. Ridge regression fixes that (see README).</p></details>
+      <div id="waterfall"><div class="empty">The readout's votes will appear here.</div></div>
+      <div class="legend"><span><i style="background:var(--up)"></i>toward 1</span>
+        <span><i style="background:var(--down)"></i>toward 0</span>
+        <span><i style="background:var(--ink)"></i>score</span></div>
+    </section>
+
+    <!-- 6. OUTPUT -->
+    <section class="card span4">
+      <h2><span class="num">6</span>Output</h2>
+      <p class="sub">The score is one number. Above 0.5 → "1", below → "0".</p>
+      <div class="bignum" id="outnum">–</div>
+      <div class="bigcap" id="outcap">waiting for a trial</div>
+      <div class="gauge"><div class="z0">says 0</div><div class="z1">says 1</div><span class="needle" id="needle"></span></div>
+      <div class="gauge-scale"><span>-0.5</span><span>0</span><span>0.5</span><span>1</span><span>1.5</span></div>
+      <div class="bigcap" id="offscale"></div>
+      <div class="verdict" id="verdict"></div>
+      <div class="tally" id="tally"></div>
+      <div class="history" id="history"></div>
+    </section>
+
+    <!-- 7. DO THE NEURONS HELP? -->
+    <section class="card span5">
+      <h2><span class="num">7</span>Without neurons: a line on the raw inputs <span class="tag" id="besttag" style="background:color-mix(in srgb, var(--bad) 15%, transparent);color:var(--bad)">best: –</span></h2>
+      <p class="why" id="basewhy">The same kind of model fed just the raw inputs. The best any straight line can do is the bar the neurons have to clear.</p>
+      <details class="explain"><summary>More detail</summary><p data-text="baseline">Linear regression on the raw inputs is
+        <i>w₁·x₁ + w₂·x₂ + … + start</i>: one straight cut through the inputs. If the right answers can be separated that way,
+        it already solves the task without any neurons; if not, no choice of weights can.</p></details>
+      <svg id="rawplot"></svg>
+      <div class="linectl">
+        <label>Rotate <input type="range" id="lineAngle" min="0" max="180" step="1" value="35"></label>
+        <label>Shift <input type="range" id="lineShift" min="-0.8" max="0.8" step="0.01" value="0"></label>
+      </div>
+      <div class="caption" id="rawcap"></div>
+    </section>
+    <section class="card span7">
+      <h2><span class="num">7</span>With neurons: the same kind of line on the fingerprint <span class="tag trained" id="beattag">vs. baseline</span></h2>
+      <p class="why">Each dot is a past trial placed by its score (left/right). One straight cut at 0.5 splits the answers; count how many
+        land on the right side and compare with the best line on the raw inputs (left).</p>
+      <details class="explain"><summary>More detail</summary><p>Up/down = total spikes, just to spread dots out (spike count alone
+        can't split them). Dots were scored by a readout trained <i>without</i> them (cross-validation), so this is honest about new
+        trials. Your trial's dot moves as each window's votes arrive.</p></details>
+      <svg id="cloudplot"></svg>
+      <div class="caption" id="cloudcap"></div>
+      <div class="legend"><span><i style="background:var(--up)"></i>answer 1</span>
+        <span><i style="background:var(--down)"></i>answer 0</span>
+        <span><i style="background:transparent;border:2px solid var(--ink)"></i>your trial</span></div>
+    </section>
+
+    <!-- 8. RELIABILITY -->
+    <section class="card">
+      <h2><span class="num">8</span>Is the answer reliable? Run it 10 times</h2>
+      <p class="why">One click is one noisy sample. Run the same pulses 10 times to see how spread out the answers are.
+        To check if a change <b>mattered</b> (e.g. a pulse 1&nbsp;ms later), run the original ×10, then your change ×10:
+        if the two rows of dots overlap, your change did no more than the background noise does.</p>
+      <div class="controls" style="margin-top:4px">
+        <button class="btn primary" id="repeat">Run current pulses ×10 (~12 s)</button>
+        <button class="btn ghost" id="repclear">Clear rows</button>
+        <div class="match" id="repnote">Each dot is one trial's score; the latest 3 runs stay stacked so you can compare them.</div>
+      </div>
+      <svg id="repeats"></svg>
+      <div class="caption" id="repcap"></div>
+    </section>
+
+    <!-- BEYOND THIS TASK -->
+    <section class="card">
+      <h2><span class="num">∞</span>Beyond this task</h2>
+      <div class="beyond">
+        <div><b>1 · Choose an encoding</b>How an input becomes zaps. Memory, parity, sequences, rhythms are all just different pulse rules.</div>
+        <div><b>2 · Keep the neurons fixed</b>Same untrained network; it mixes inputs over time and space. Real cultures slot in here.</div>
+        <div><b>3 · Decode + linear readout</b>Spikes → numbers → linear regression. Always compare against the raw-input baseline.</div>
+      </div>
+      <p class="sub" style="margin-top:12px">Any task file (copy <code>tasks/template_task.py</code> into <code>tasks/</code>) runs here: <code>python playground/web.py your_task</code></p>
+    </section>
+  </div>
+</div>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const S = { pulses: [], history: [], t: 0, playing: false, speed: 1, trial: null };
+
+function el(tag, attrs = {}, parent) {
+  const node = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+function tip(node, text) { el("title", {}, node).textContent = text; return node; }
+const fmt = v => (v >= 0 ? "+" : "") + v.toFixed(2);
+const pct = v => `${Math.round(v * 100)}%`;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// ============================================================ 1. timeline (your input)
+// Pulses are [time ms, electrode, strength µA], placed inside the readout window (0..S.R ms).
+const AMP_MIN = 5, AMP_MAX = 150;
+const TL = { W: 1000, L: 104, R: 16, top: 18, lane: 46, gap: 10 };
+const tx = t => TL.L + t / S.R * (TL.W - TL.L - TL.R);
+const tFromX = x => clamp((x - TL.L) / (TL.W - TL.L - TL.R) * S.R, 0, S.R - 1);
+const laneY = i => TL.top + i * (TL.lane + TL.gap);
+const snap = t => Math.round(t * 2) / 2;   // 0.5 ms grid
+const tickStep = span => span <= 120 ? 10 : span <= 250 ? 25 : span <= 500 ? 50 : 100;
+
+// strength → color: light blue (weak) → blue (40 µA, trained) → deep navy (strong)
+const AMP_STOPS = [[5, [191, 219, 254]], [40, [59, 130, 246]], [90, [29, 78, 216]], [150, [23, 37, 84]]];
+function ampColor(a) {
+  a = clamp(a, AMP_MIN, AMP_MAX);
+  for (let k = 1; k < AMP_STOPS.length; k++) {
+    const [a0, c0] = AMP_STOPS[k - 1], [a1, c1] = AMP_STOPS[k];
+    if (a <= a1) {
+      const f = (a - a0) / (a1 - a0);
+      return `rgb(${c0.map((v, j) => Math.round(v + f * (c1[j] - v))).join(",")})`;
+    }
+  }
+}
+const ampGradient = () => `linear-gradient(90deg, ${AMP_STOPS.map(([a, c]) => `rgb(${c}) ${(a - AMP_MIN) / (AMP_MAX - AMP_MIN) * 100}%`).join(", ")})`;
+
+function svgPoint(svg, evt) {
+  const p = svg.createSVGPoint(); p.x = evt.clientX; p.y = evt.clientY;
+  return p.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function drawTimeline() {
+  const svg = $("timeline"); svg.innerHTML = "";
+  const H = laneY(S.rows.length) + 20;
+  svg.setAttribute("viewBox", `0 0 ${TL.W} ${H}`);
+  for (let t = 0; t <= S.R; t += tickStep(S.R)) {
+    el("line", { x1: tx(t), x2: tx(t), y1: TL.top - 4, y2: H - 20, class: "tick" }, svg);
+    el("text", { x: tx(t), y: H - 4, "text-anchor": "middle", class: "axis-label" }, svg).textContent = `${t} ms`;
+  }
+  S.rows.forEach((ch, i) => {
+    const y0 = laneY(i), base = y0 + TL.lane - 6;
+    el("text", { x: 0, y: y0 + TL.lane / 2 + 4, class: "axis-label" }, svg).textContent = `electrode ${ch}`;
+    const lane = el("rect", { x: TL.L, y: y0, width: TL.W - TL.L - TL.R, height: TL.lane, rx: 8, class: "lane" }, svg);
+    el("line", { x1: TL.L + 6, x2: TL.W - TL.R - 6, y1: base, y2: base, stroke: "var(--ink-3)", "stroke-width": 1, opacity: 0.5, "pointer-events": "none" }, svg);
+    lane.addEventListener("pointerdown", e => {   // empty spot: add a pulse at the current strength
+      S.pulses.push([snap(tFromX(svgPoint(svg, e).x)), ch, S.brush]);
+      S.sel = S.pulses.length - 1;
+      changed();
+    });
+  });
+  // pulses: a bar rising from the lane's baseline; taller + hotter color = stronger
+  S.pulses.forEach((p, k) => {
+    const i = S.rows.indexOf(p[1]); if (i < 0) return;
+    const base = laneY(i) + TL.lane - 6, h = 8 + (TL.lane - 16) * (p[2] - AMP_MIN) / (AMP_MAX - AMP_MIN);
+    const w = Math.max(tx(1) - tx(0), 10), selected = k === S.sel;
+    const g = el("g", { class: "pulse" }, svg);
+    if (selected) el("rect", { x: tx(p[0]) - 3, y: base - h - 3, width: w + 6, height: h + 6, rx: 4, fill: "none", stroke: "var(--ink)", "stroke-width": 2 }, g);
+    tip(el("rect", { x: tx(p[0]), y: base - h, width: w, height: h, rx: 2.5, fill: ampColor(p[2]) }, g),
+      `${p[0]} ms · electrode ${p[1]} · ${p[2]} µA (click to select, drag to move)`);
+    el("text", { x: tx(p[0]) + w + 4, y: base - h + 9, class: "pulse-label", style: selected ? "fill:var(--ink) !important" : "" }, g)
+      .textContent = `${p[0]} ms`;
+    g.addEventListener("pointerdown", e => {
+      e.stopPropagation(); g.setPointerCapture(e.pointerId);
+      S.sel = k; syncStrength();
+      const x0 = tx(p[0]);
+      g.onpointermove = ev => { p[0] = snap(tFromX(svgPoint(svg, ev).x)); g.setAttribute("transform", `translate(${tx(p[0]) - x0},0)`); };
+      g.onpointerup = () => { g.onpointermove = g.onpointerup = null; changed(); };
+    });
+  });
+  S.tlCursor = el("line", { y1: TL.top - 8, y2: H - 20, class: "cursor", opacity: 0 }, svg);
+}
+
+// The strength slider edits the selected pulse, or sets the strength of new pulses if none is selected
+function syncStrength() {
+  const p = S.pulses[S.sel];
+  const v = p ? p[2] : S.brush;
+  $("amp").value = v;
+  $("ampval").textContent = `${v} µA`;
+  $("ampval").style.background = ampColor(v);
+  $("ampval").style.color = v < 25 ? "#111827" : "#fff";
+  $("amplabel").textContent = p ? `Selected pulse (${p[0]} ms)` : "New pulses";
+  $("delpulse").style.display = p ? "" : "none";
+}
+function setStrength(v) {
+  v = clamp(Math.round(v / 5) * 5, AMP_MIN, AMP_MAX);
+  if (S.pulses[S.sel]) S.pulses[S.sel][2] = v; else S.brush = v;
+  changed();
+}
+
+const keyOf = ps => JSON.stringify(ps.map(p => [+(+p[0]).toFixed(1), p[1], Math.round(p[2])]).sort((a, b) => a[0] - b[0] || a[1] - b[1]));
+function changed() {
+  if (S.sel >= S.pulses.length) S.sel = -1;
+  drawTimeline(); syncStrength();
+  const hit = S.presets.find(p => keyOf(p.pulses) === keyOf(S.pulses));
+  document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", !!hit && c.dataset.label === hit.label));
+  const n = S.pulses.length;
+  $("match").innerHTML = hit
+    ? `= task input <b>${hit.label}</b> · right answer <b>${hit.answer}</b>`
+    : `<b>Custom pattern</b> (${n} pulse${n === 1 ? "" : "s"}): no right answer, see what the readout makes of it.`;
+  const secs = Math.max(1, Math.round(1 + 0.016 * S.R));
+  if (!$("run").disabled) $("run").textContent = `Send to the neurons → (~${secs} s)`;
+}
+function loadPreset(p) {
+  S.pulses = p.pulses.map(q => [...q]); S.sel = -1;
+  changed();
+}
+
+
+// ============================================================ 2. map + raster
+function drawMap() {
+  const svg = $("map"); svg.innerHTML = "";
+  const xs = S.neurons.map(n => n[0]), ys = S.neurons.map(n => n[1]);
+  const x0 = Math.min(...xs) - 120, y0 = Math.min(...ys) - 120;
+  const w = Math.max(...xs) - x0 + 120, h = Math.max(...ys) - y0 + 170;
+  svg.setAttribute("viewBox", `${x0} ${y0} ${w} ${h}`);
+  S.elecNodes = {};
+  for (const [ch, x, y] of S.electrodes) {
+    const used = S.rows.includes(ch);
+    S.elecNodes[ch] = tip(el("rect", { x: x - 22, y: y - 22, width: 44, height: 44, rx: 8,
+      class: "electrode" + (used ? " used" : "") }, svg), `electrode ${ch}: ${used ? "on your timeline (zaps + listens)" : "listens only"}`);
+    if (used) el("text", { x: x + 32, y: y - 26, class: "elabel" }, svg).textContent = ch;
+  }
+  S.neuronNodes = S.neurons.map(([x, y], i) => tip(el("circle", { cx: x, cy: y, r: 10, class: "neuron" }, svg), `neuron ${i}`));
+  // scale bar
+  const sy = y0 + h - 40;
+  el("line", { x1: x0 + 30, x2: x0 + 230, y1: sy, y2: sy, stroke: "var(--ink-2)", "stroke-width": 6 }, svg);
+  el("text", { x: x0 + 250, y: sy + 14, style: "font-size:40px" }, svg).textContent = "200 µm (electrode spacing)";
+}
+
+const RS = { W: 640, H: 300, L: 44, B: 26, T: 8 };
+const rx = t => RS.L + t / S.D * (RS.W - RS.L - 8);
+const ry = row => RS.H - RS.B - (row + 0.5) / S.neurons.length * (RS.H - RS.B - RS.T);
+function drawRaster(r) {
+  const svg = $("raster"); svg.innerHTML = "";
+  svg.setAttribute("viewBox", `0 0 ${RS.W} ${RS.H}`);
+  if (S.D > S.R) el("rect", { x: rx(0), y: RS.T, width: rx(S.R) - rx(0), height: RS.H - RS.B - RS.T, fill: "var(--stim-soft)", opacity: 0.35 }, svg);
+  for (let t = 0; t <= S.D; t += tickStep(S.D)) {
+    el("line", { x1: rx(t), x2: rx(t), y1: RS.T, y2: RS.H - RS.B, class: "tick" }, svg);
+    el("text", { x: rx(t), y: RS.H - 6, "text-anchor": "middle", class: "axis-label" }, svg).textContent = `${t} ms`;
+  }
+  el("text", { x: 12, y: (RS.H - RS.B) / 2, class: "axis-label", "text-anchor": "middle",
+    transform: `rotate(-90 12 ${(RS.H - RS.B) / 2})` }, svg).textContent = "neurons (near → far from electrode)";
+  S.ticks = [];
+  if (r) {
+    for (const [t] of r.pulses) el("rect", { x: rx(t), y: RS.T, width: Math.max(rx(1) - rx(0), 3), height: RS.H - RS.B - RS.T, class: "band" }, svg);
+    S.ticks = r.spikes.map(([row, , t]) => el("line", { x1: rx(t), x2: rx(t), y1: ry(row) - 2.5, y2: ry(row) + 2.5, class: "spike" }, svg));
+  }
+  S.rCursor = el("line", { y1: RS.T, y2: RS.H - RS.B, class: "cursor", opacity: r ? 1 : 0 }, svg);
+}
+
+function drawActivity(r) {
+  const svg = $("activity"); svg.innerHTML = "";
+  const W = RS.W, H = 150, T = 14, B = 22;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  S.aCursor = S.aClip = null;
+  if (!r) {
+    el("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "axis-label" }, svg).textContent = "Send a pattern to see the network's activity rise and fall.";
+    return;
+  }
+  const bins = new Array(Math.ceil(S.D)).fill(0);   // spikes in each 1 ms
+  for (const [, , t] of r.spikes) bins[Math.min(bins.length - 1, Math.floor(t))]++;
+  // background level = typical activity away from any pulse
+  const quiet = bins.filter((_, i) => !r.pulses.some(([pt]) => i >= pt - 1 && i < pt + 15)).sort((a, b) => a - b);
+  const background = quiet.length ? quiet.reduce((a, b) => a + b, 0) / quiet.length : 0;
+  const peak = Math.max(4, ...bins);
+  const ay = v => H - B - v / peak * (H - B - T);
+  if (S.D > S.R) {
+    el("rect", { x: rx(0), y: T, width: rx(S.R) - rx(0), height: H - B - T, fill: "var(--stim-soft)", opacity: 0.35 }, svg);
+    el("text", { x: rx(S.R) + 6, y: T + 10, style: "font-size:11px;fill:var(--ink-3)" }, svg).textContent = "after the readout window: just watching it settle";
+  }
+  el("text", { x: rx(0) + 4, y: T + 10, style: "font-size:11px;font-weight:600;fill:var(--stim)" }, svg).textContent = `readout window (0–${S.R} ms)`;
+  for (let t = 0; t <= S.D; t += tickStep(S.D))
+    el("text", { x: rx(t), y: H - 6, "text-anchor": "middle", class: "axis-label" }, svg).textContent = `${t} ms`;
+  for (const [t, , a] of r.pulses) el("rect", { x: rx(t), y: T, width: Math.max(rx(1) - rx(0), 2), height: H - B - T, fill: ampColor(a), opacity: 0.35 }, svg);
+  const clip = el("clipPath", { id: "aclip" }, el("defs", {}, svg));
+  S.aClip = el("rect", { x: rx(0), y: 0, width: 0, height: H }, clip);
+  const pts = bins.map((v, i) => `${rx(i + 0.5)},${ay(v)}`).join(" ");
+  el("polygon", { points: `${rx(0.5)},${ay(0)} ${pts} ${rx(bins.length - 0.5)},${ay(0)}`, fill: "var(--spike)", opacity: 0.18, "clip-path": "url(#aclip)" }, svg);
+  el("polyline", { points: pts, fill: "none", stroke: "var(--spike)", "stroke-width": 2, "stroke-linejoin": "round", "clip-path": "url(#aclip)" }, svg);
+  el("line", { x1: rx(0), x2: rx(S.D), y1: ay(0), y2: ay(0), class: "tick" }, svg);
+  el("line", { x1: rx(0), x2: rx(S.D), y1: ay(background), y2: ay(background), stroke: "var(--ink-2)", "stroke-dasharray": "5 4", "stroke-width": 1.2 }, svg);
+  el("text", { x: rx(S.D), y: ay(background) - 5, "text-anchor": "end", style: "font-size:11px;fill:var(--ink-2)" }, svg)
+    .textContent = `background ≈ ${background.toFixed(1)} spikes/ms (never zero)`;
+  el("text", { x: RS.L - 6, y: ay(peak) + 4, "text-anchor": "end", class: "axis-label" }, svg).textContent = peak;
+  el("text", { x: RS.L - 6, y: ay(0) + 4, "text-anchor": "end", class: "axis-label" }, svg).textContent = 0;
+  S.aCursor = el("line", { y1: T, y2: H - B, class: "cursor" }, svg);
+}
+
+// ============================================================ 3. decoding heatmap
+function drawHeat(r) {
+  const box = $("heat"); S.cells = null;
+  if (!r.grid) { box.innerHTML = `<div class="empty">This task's features aren't electrode × time-window counts, so there's no grid to draw.</div>`; return; }
+  const keep = r.grid.map((_, i) => i).filter(i => r.grid[i].some(v => v) || S.rows.includes(S.electrodes[i][0]));
+  const rows = keep.map(i => r.grid[i]), nb = rows[0].length, max = Math.max(1, ...rows.flat());
+  const L = 92, cw = (1000 - L - 10) / nb, ch = 18, H = rows.length * ch + 30;
+  box.innerHTML = "";
+  const svg = el("svg", { viewBox: `0 0 1000 ${H}` }, box);
+  S.cells = [];
+  rows.forEach((row, i) => {
+    const e = S.electrodes[keep[i]][0];
+    el("text", { x: L - 8, y: i * ch + ch - 4, "text-anchor": "end", class: "axis-label",
+      style: S.rows.includes(e) ? "fill:var(--stim);font-weight:600" : "" }, svg).textContent = `electrode ${e}`;
+    row.forEach((v, j) => {
+      const c = el("rect", { x: L + j * cw, y: i * ch, width: cw, height: ch, rx: 3, class: "cell", fill: "var(--lane)" }, svg);
+      c.dataset.fill = v ? `color-mix(in srgb, var(--spike) ${15 + 85 * v / max}%, var(--lane))` : "var(--lane)";
+      tip(c, `electrode ${e}, ${j * r.bin_ms}–${(j + 1) * r.bin_ms} ms: ${v} spike${v === 1 ? "" : "s"}`);
+      S.cells.push([c, j]);
+    });
+  });
+  for (let j = 0; j <= nb; j += 2)
+    el("text", { x: L + j * cw, y: H - 8, "text-anchor": "middle", class: "axis-label" }, svg).textContent = `${j * r.bin_ms} ms`;
+  S.nowCol = el("rect", { y: -2, width: cw, height: rows.length * ch + 4, rx: 4, class: "nowcol" }, svg);
+  S.heatX = j => L + j * cw;
+  const cap = document.createElement("div");
+  cap.className = "caption";
+  cap.innerHTML = `Showing the ${rows.length} electrodes that heard something; the other ${S.nFeatures / r.votes.length - rows.length}
+    are all zeros this trial. The outlined column is the window being counted right now.`;
+  box.appendChild(cap);
+}
+
+// ============================================================ 4. counts × weights = votes
+// Three grids with the fingerprint's layout (electrodes under the dish × 5 ms windows):
+// your spike counts, the readout's learned weights, and their product (the votes).
+// Rows: electrodes that heard something this trial or carry a big weight; the rest are hidden.
+function drawWeights(r) {
+  const box = $("weights");
+  if (!S.weights) { box.innerHTML = `<div class="empty">This task's features aren't electrode × time-window counts, so there's no weight grid to draw.</div>`; return; }
+  const W = S.weights, nb = W[0].length, wmax = Math.max(...W.flat().map(Math.abs)) || 1;
+  const counts = r?.grid ?? W.map(row => row.map(() => 0));
+  const strong = W.map(row => Math.max(...row.map(Math.abs)));
+  const cut = [...strong].sort((a, b) => b - a)[Math.min(9, strong.length - 1)];   // top ~10 electrodes by weight
+  const keep = W.map((_, i) => i).filter(i => counts[i].some(v => v) || strong[i] >= cut || S.rows.includes(S.electrodes[i][0]));
+  const votes = keep.map(i => counts[i].map((c, j) => c * W[i][j]));
+  const vmax = Math.max(1e-9, ...votes.flat().map(Math.abs)), cmax = Math.max(1, ...keep.flatMap(i => counts[i]));
+  const L = 92, gw = 248, gap = 46, ch = 15, T = 26, H = T + keep.length * ch + 26, cw = gw / nb;
+  const gx = k => L + k * (gw + gap);
+  box.innerHTML = "";
+  const svg = el("svg", { viewBox: `0 0 ${L + 3 * gw + 2 * gap + 4} ${H}` }, box);
+  const diverge = (v, max) => v === 0 ? "var(--lane)"
+    : `color-mix(in srgb, ${v > 0 ? "var(--up)" : "var(--down)"} ${Math.round(12 + 88 * Math.min(1, Math.abs(v) / max))}%, var(--lane))`;
+  [["your spike counts", "from step 3"], ["learned weights", "same for every trial"], ["votes = count × weight", "what this trial adds up"]]
+    .forEach(([title, sub], k) => {
+      el("text", { x: gx(k), y: 11, style: "font-size:12.5px;font-weight:700;fill:var(--ink)" }, svg).textContent = title;
+      el("text", { x: gx(k), y: 23, style: "font-size:11px;fill:var(--ink-3)" }, svg).textContent = sub;
+    });
+  el("text", { x: gx(1) - gap / 2, y: T + keep.length * ch / 2 + 6, "text-anchor": "middle", style: "font-size:22px;fill:var(--ink-2)" }, svg).textContent = "×";
+  el("text", { x: gx(2) - gap / 2, y: T + keep.length * ch / 2 + 6, "text-anchor": "middle", style: "font-size:22px;fill:var(--ink-2)" }, svg).textContent = "=";
+  S.wCells = [];
+  keep.forEach((i, row) => {
+    const e = S.electrodes[i][0], y = T + row * ch;
+    el("text", { x: L - 8, y: y + ch - 3, "text-anchor": "end", class: "axis-label",
+      style: S.rows.includes(e) ? "fill:var(--stim);font-weight:600" : "" }, svg).textContent = `electrode ${e}`;
+    for (let j = 0; j < nb; j++) {
+      const c = counts[i][j], w = W[i][j], v = votes[row][j], win = `${j * S.binMs}–${(j + 1) * S.binMs} ms`;
+      const cc = tip(el("rect", { x: gx(0) + j * cw, y, width: cw, height: ch, class: "cell", fill: "var(--lane)" }, svg), `electrode ${e}, ${win}: ${c} spikes`);
+      cc.dataset.fill = c ? `color-mix(in srgb, var(--spike) ${15 + 85 * c / cmax}%, var(--lane))` : "var(--lane)";
+      tip(el("rect", { x: gx(1) + j * cw, y, width: cw, height: ch, class: "cell", fill: diverge(w, wmax) }, svg), `electrode ${e}, ${win}: weight ${fmt(w)} per spike`);
+      const vc = tip(el("rect", { x: gx(2) + j * cw, y, width: cw, height: ch, class: "cell", fill: "var(--lane)" }, svg), `electrode ${e}, ${win}: ${c} × ${fmt(w)} = ${fmt(v)}`);
+      vc.dataset.fill = diverge(v, vmax);
+      S.wCells.push([cc, j], [vc, j]);
+    }
+  });
+  for (let k = 0; k < 3; k++)
+    for (const j of [0, nb / 2, nb])
+      el("text", { x: gx(k) + j * cw, y: H - 8, "text-anchor": "middle", class: "axis-label" }, svg).textContent = `${j * S.binMs} ms`;
+  const hidden = W.length - keep.length;
+  $("wcap").innerHTML = r
+    ? `Sum of every vote = <b>${fmt(r.votes.reduce((a, b) => a + b, 0))}</b>, plus the start value <b>${r.start.toFixed(2)}</b> = score
+       <b>${r.output.toFixed(2)}</b> (step 6). ${hidden} quiet electrodes with small weights are hidden; hover any square for its number.`
+    : `These are the readout's learned weights. Send a pattern to see your counts and votes next to them.`;
+}
+
+// ============================================================ 7. straight-line plots
+function drawRawPlot() {
+  const svg = $("rawplot"); svg.innerHTML = "";
+  const W = 380, H = 330, P = 54, span = W - 2 * P;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (S.raw[0].input.length !== 2) {   // the square + line only makes sense for 2 inputs; otherwise list the scores
+    svg.style.display = "none";
+    document.querySelector(".linectl").style.display = "none";
+    $("rawcap").innerHTML = "Linear regression fit on the raw inputs scores each one:<br>" +
+      S.raw.map(p => `input (${p.input.join(", ")}) → score <b>${p.score.toFixed(2)}</b> (right answer ${p.answer})`).join("<br>");
+    return;
+  }
+  const px = v => P + (v + 0.25) / 1.5 * span, py = v => H - P - (v + 0.25) / 1.5 * span;
+  el("rect", { x: px(-0.25), y: py(1.25), width: span, height: span, rx: 10, fill: "var(--lane)" }, svg);
+  const clip = el("clipPath", { id: "rawclip" }, el("defs", {}, svg));
+  el("rect", { x: px(-0.25), y: py(1.25), width: span, height: span, rx: 10 }, clip);
+  for (const v of [0, 1]) {
+    el("text", { x: px(v), y: H - P + 22, "text-anchor": "middle", class: "axis-label" }, svg).textContent = v;
+    el("text", { x: P - 16, y: py(v) + 4, "text-anchor": "middle", class: "axis-label" }, svg).textContent = v;
+  }
+  el("text", { x: W / 2, y: H - 8, "text-anchor": "middle", class: "axis-label" }, svg).textContent = S.inputNames[0];
+  el("text", { x: 14, y: H / 2, "text-anchor": "middle", class: "axis-label", transform: `rotate(-90 14 ${H / 2})` }, svg).textContent = S.inputNames[1];
+  const line = el("line", { stroke: "var(--ink)", "stroke-width": 2.5, "clip-path": "url(#rawclip)" }, svg);
+  S.rawDots = {};
+  const dots = S.raw.map(p => {
+    S.rawDots[`(${p.input.join(", ")})`] = el("circle", { cx: px(p.input[0]), cy: py(p.input[1]), r: 21, fill: "none",
+      stroke: "var(--ink)", "stroke-width": 3, opacity: 0 }, svg);
+    tip(el("circle", { cx: px(p.input[0]), cy: py(p.input[1]), r: 14, fill: p.answer ? "var(--up)" : "var(--down)",
+      stroke: "var(--card)", "stroke-width": 3 }, svg), `input (${p.input}) → right answer ${p.answer}; linear regression says ${p.score.toFixed(2)}`);
+    el("text", { x: px(p.input[0]), y: py(p.input[1]) + 4.5, "text-anchor": "middle",
+      style: "fill:#fff;font-size:13px;font-weight:700" }, svg).textContent = p.answer;
+    return p;
+  });
+  const fit = `Least-squares fit: score = ${S.rawCoef[0].toFixed(2)}·bit1 + ${S.rawCoef[1].toFixed(2)}·bit2 + ${S.rawStart.toFixed(2)},
+    i.e. <b>${S.rawStart.toFixed(2)} for every input</b>. It gives up.`;
+  // the line goes through the middle of the square, rotated by "Rotate" and pushed sideways by "Shift"
+  function drawLine() {
+    const a = +$("lineAngle").value * Math.PI / 180, shift = +$("lineShift").value;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    const cx = 0.5 - dy * shift, cy = 0.5 + dx * shift;
+    line.setAttribute("x1", px(cx - dx * 2)); line.setAttribute("y1", py(cy - dy * 2));
+    line.setAttribute("x2", px(cx + dx * 2)); line.setAttribute("y2", py(cy + dy * 2));
+    const side = q => Math.sign((q[0] - cx) * dy - (q[1] - cy) * dx);
+    const right1 = dots.filter(p => (side(p.input) > 0) === (p.answer === 1)).length;
+    const best = Math.max(right1, dots.length - right1);   // whichever side we call "1", take the better choice
+    const n = dots.length, k = Math.round(S.bestLine * n);
+    $("rawcap").innerHTML = `This line gets <b>${best} of ${n}</b> right${best === n ? "" : ": a corner is on the wrong side"}.
+      The best any line can do is ${k} of ${n} (${pct(S.bestLine)}).<br>${fit}`;
+  }
+  $("lineAngle").oninput = $("lineShift").oninput = drawLine;
+  drawLine();
+}
+
+const CP = { W: 560, H: 340, L: 52, R: 24, T: 26, B: 46 };
+function drawCloud(r) {
+  const svg = $("cloudplot"); svg.innerHTML = "";
+  svg.setAttribute("viewBox", `0 0 ${CP.W} ${CP.H}`);
+  const pathX = r ? r.path.map(p => p[0]) : [];
+  const x0 = Math.min(-0.6, ...S.cloud.map(d => d[0]), ...pathX) - 0.1;
+  const x1 = Math.max(1.6, ...S.cloud.map(d => d[0]), ...pathX) + 0.1;
+  const y1 = Math.max(...S.cloud.map(d => d[1]), r ? r.total : 0) * 1.12 + 1;
+  const px = v => CP.L + (v - x0) / (x1 - x0) * (CP.W - CP.L - CP.R);
+  const py = v => CP.H - CP.B - v / y1 * (CP.H - CP.B - CP.T);
+  S.cpx = px; S.cpy = py;
+  el("rect", { x: px(x0), y: CP.T, width: px(0.5) - px(x0), height: CP.H - CP.B - CP.T, fill: "color-mix(in srgb, var(--down) 9%, transparent)" }, svg);
+  el("rect", { x: px(0.5), y: CP.T, width: px(x1) - px(0.5), height: CP.H - CP.B - CP.T, fill: "color-mix(in srgb, var(--up) 9%, transparent)" }, svg);
+  el("text", { x: px(x0) + 8, y: CP.T + 16, class: "axis-label" }, svg).textContent = "says 0";
+  el("text", { x: px(x1) - 8, y: CP.T + 16, "text-anchor": "end", class: "axis-label" }, svg).textContent = "says 1";
+  el("line", { x1: px(0.5), x2: px(0.5), y1: CP.T, y2: CP.H - CP.B, stroke: "var(--ink)", "stroke-width": 2, "stroke-dasharray": "6 5" }, svg);
+  el("text", { x: px(0.5), y: CP.T - 6, "text-anchor": "middle", class: "axis-label", style: "fill:var(--ink);font-weight:600" }, svg).textContent = "one straight cut at 0.5";
+  for (let v = Math.ceil(x0 * 2) / 2; v <= x1; v += 0.5)
+    el("text", { x: px(v), y: CP.H - CP.B + 18, "text-anchor": "middle", class: "axis-label" }, svg).textContent = v;
+  el("text", { x: (CP.L + CP.W) / 2, y: CP.H - 6, "text-anchor": "middle", class: "axis-label" }, svg).textContent = "linear regression's score →";
+  el("text", { x: 14, y: (CP.H - CP.B) / 2, "text-anchor": "middle", class: "axis-label",
+    transform: `rotate(-90 14 ${(CP.H - CP.B) / 2})` }, svg).textContent = "total spikes";
+  let right = 0;
+  for (const [s, t, a] of S.cloud) {
+    right += (s > 0.5) === (a === 1);
+    tip(el("circle", { cx: px(s), cy: py(t), r: 5.5, fill: a ? "var(--up)" : "var(--down)", stroke: "var(--card)",
+      "stroke-width": 2, opacity: 0.8 }, svg), `past trial · right answer ${a} · score ${s.toFixed(2)} · ${t} spikes`);
+  }
+  S.cloudRight = right;
+  S.trail = el("polyline", { fill: "none", stroke: "var(--ink)", "stroke-width": 1.5, "stroke-dasharray": "3 3", opacity: r ? 0.6 : 0 }, svg);
+  S.you = el("circle", { r: 10, fill: "var(--card)", "fill-opacity": 0.4, stroke: "var(--ink)", "stroke-width": 3, opacity: r ? 1 : 0 }, svg);
+  S.youLabel = el("text", { "text-anchor": "middle", style: "fill:var(--ink);font-weight:700;font-size:13px", opacity: r ? 1 : 0 }, svg);
+  S.youLabel.textContent = "your trial";
+  $("cloudcap").innerHTML = `<b>${right} of ${S.cloud.length}</b> past trials (${Math.round(100 * right / S.cloud.length)}%) land on the correct side of a single straight cut, vs. ${pct(S.bestLine)} for the best line on the raw inputs.`;
+}
+
+// ============================================================ 5. waterfall
+function drawWaterfall(r) {
+  const box = $("waterfall"); box.innerHTML = "";
+  const W = 760, H = 280, L = 44, B = 34, T = 22;
+  const steps = [{ label: "start", v: r.start, from: 0 }];
+  let run = r.start;
+  r.votes.forEach((v, j) => { steps.push({ label: `${j * r.bin_ms}`, v, from: run }); run += v; });
+  const levels = [0, 0.5, 1, ...steps.map(s => s.from), ...steps.map(s => s.from + s.v), r.output];
+  const lo = Math.min(...levels), hi = Math.max(...levels), pad = (hi - lo) * 0.12;
+  const y = v => T + (hi + pad - v) / (hi - lo + 2 * pad) * (H - T - B);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, box);
+  const n = steps.length + 1, bw = (W - L) / n;
+  for (const v of [0, 0.5, 1]) {
+    el("line", { x1: L, x2: W, y1: y(v), y2: y(v), class: v === 0.5 ? "thresh" : "tick" }, svg);
+    el("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end", class: "axis-label" }, svg).textContent = v;
+  }
+  el("text", { x: L + 4, y: y(0.5) - 6, class: "axis-label" }, svg).textContent = "0.5 = decision line";
+  S.wfBars = steps.map((s, i) => {
+    const x = L + i * bw + bw * 0.18, w = bw * 0.64;
+    const top = Math.min(y(s.from), y(s.from + s.v)), h = Math.max(2, Math.abs(y(s.from) - y(s.from + s.v)));
+    const g = el("g", { opacity: 0 }, svg);
+    tip(el("rect", { x, y: top, width: w, height: h, rx: 4, fill: i === 0 ? "var(--neutral)" : s.v >= 0 ? "var(--up)" : "var(--down)" }, g),
+      i === 0 ? `start value ${r.start.toFixed(2)} (learned)` : `${s.label}–${+s.label + r.bin_ms} ms window votes ${fmt(s.v)}`);
+    if (i > 0) el("line", { x1: x - bw * 0.36, x2: x, y1: y(s.from), y2: y(s.from), class: "tick" }, g);
+    if (i === 0 || Math.abs(s.v) > 0.08)
+      el("text", { x: x + w / 2, y: top - 5, "text-anchor": "middle", class: "axis-label" }, g).textContent = i === 0 ? s.v.toFixed(2) : fmt(s.v);
+    el("text", { x: x + w / 2, y: H - 14, "text-anchor": "middle", class: "axis-label" }, svg).textContent = s.label;
+    return g;
+  });
+  const ox = L + (n - 1) * bw + bw * 0.18, ow = bw * 0.64;
+  S.outBar = el("rect", { x: ox, width: ow, rx: 4, fill: "var(--ink)" }, svg);
+  S.outBarLabel = el("text", { x: ox + ow / 2, "text-anchor": "middle", style: "fill:var(--ink);font-weight:700;font-size:12px" }, svg);
+  S.outBarName = el("text", { x: ox + ow / 2, y: H - 14, "text-anchor": "middle", class: "axis-label" }, svg);
+  S.wfY = y;
+  el("text", { x: L + (W - L) / 2, y: H, "text-anchor": "middle", class: "axis-label" }, svg).textContent = "time window start (ms)";
+}
+
+// ============================================================ story + output
+function tellStory(r) {
+  const byEl = {};
+  for (const [t, ch, a] of r.pulses) (byEl[ch] ??= []).push([t, a]);
+  const sent = r.pulses.length === 0 ? "no pulses at all (silence)" :
+    Object.entries(byEl).map(([ch, ts]) => `electrode ${ch} at ${ts.sort((a, b) => a[0] - b[0]).map(([t, a]) => `${t} ms (${a} µA)`).join(", ")}`).join("; ");
+  const fired = new Set(r.spikes.map(s => s[1])).size;
+  const nearPulse = r.spikes.filter(s => r.pulses.some(([t]) => s[2] >= t && s[2] <= t + 3)).length;
+  const order = r.votes.map((v, j) => [v, j]).sort((a, b) => Math.abs(b[0]) - Math.abs(a[0])).slice(0, 3).filter(([v]) => Math.abs(v) > 0.05);
+  const votes = order.length ? order.map(([v, j]) => `${j * r.bin_ms}–${(j + 1) * r.bin_ms} ms <b>${fmt(v)}</b>`).join(", ") : "no window voted strongly";
+  const stray = order.find(([, j]) => !r.pulses.some(([t]) => (j + 1) * r.bin_ms > t && j * r.bin_ms < t + 8));
+  const what = r.match ? `task input <b>${r.match}</b>` : "a <b>custom pattern</b>";
+  const verdict = r.answer === null ? "(custom pattern, no right answer)"
+    : r.prediction === r.answer ? `Right answer ${r.answer}: <b class="ok">correct</b>.`
+    : `Right answer ${r.answer}: <b class="no">wrong</b> (background noise; happens ~1 in 7).`;
+  $("story").innerHTML = `<ol>
+    <li><b>Input:</b> ${sent} = ${what}. Simulated for ${r.duration} ms.</li>
+    <li><b>Network:</b> <b>${fired}</b> of ${S.neurons.length} neurons fired (${nearPulse} of ${r.spikes.length} spikes right after a pulse, the rest noise).</li>
+    <li><b>Decoding:</b> electrodes heard <b>${r.total}</b> spikes → ${S.nFeatures} numbers.</li>
+    <li><b>Linear regression:</b> biggest votes: ${votes}.${stray ? ` The ${stray[1] * r.bin_ms} ms vote is far from any pulse, so it's noise.` : ""}</li>
+    <li><b>Output:</b> score <b>${r.output.toFixed(2)}</b> → says <b>${r.prediction}</b>. ${verdict}</li></ol>`;
+}
+
+function finishTrial(r) {
+  if (r.done) return; r.done = true;
+  let html, mark = "–";
+  if (r.answer === null) {
+    html = `<span class="big">says ${r.prediction}</span>Custom pattern: there's no right answer. The readout just applies what it learned.`;
+  } else {
+    const ok = r.prediction === r.answer; mark = ok ? "✓" : "✗";
+    html = `<span class="big ${ok ? "ok" : "no"}">says ${r.prediction} ${mark}</span>Input <b>${r.match}</b>, right answer <b>${r.answer}</b>.` +
+      (ok ? "" : " Every trial has fresh background noise, so this happens sometimes. Check step 5 for a big vote far from the pulses.");
+  }
+  $("verdict").innerHTML = html;
+  S.history.unshift({ label: `${r.match ?? "custom"} → ${r.prediction} ${mark}`, ok: mark === "✓", graded: mark !== "–" });
+  const graded = S.history.filter(h => h.graded);
+  $("tally").innerHTML = graded.length ? `This session: <b>${graded.filter(h => h.ok).length} of ${graded.length}</b> task inputs right.` : "";
+  $("history").innerHTML = S.history.slice(0, 12).map(h => `<span>${h.label}</span>`).join("");
+  for (const [label, ring] of Object.entries(S.rawDots ?? {})) ring.setAttribute("opacity", label === r.match ? 1 : 0);
+}
+
+// ============================================================ 7. repeat ×10
+function patternName(pulses, match) {
+  if (match) return `task input ${match}`;
+  if (!pulses.length) return "custom: silence";
+  return "custom: " + [...pulses].sort((a, b) => a[0] - b[0])
+    .map(([t, ch, a]) => `e${ch} ${t} ms${a !== S.brushDefault ? ` @${a}µA` : ""}`).join(", ");
+}
+
+async function runRepeat() {
+  const btn = $("repeat");
+  btn.disabled = true; $("run").disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>Running 10 trials…`;
+  const pulses = S.pulses.slice();
+  const r = await (await fetch("/api/repeat", { method: "POST", body: JSON.stringify({ pulses, n: 10 }) })).json();
+  S.repeats.unshift({ name: patternName(pulses, r.match), ...r });
+  S.repeats = S.repeats.slice(0, 3);
+  drawRepeats();
+  btn.disabled = false; $("run").disabled = false;
+  btn.textContent = "Run current pulses ×10 (~12 s)";
+  changed();
+}
+
+const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
+const sd = xs => Math.sqrt(mean(xs.map(x => (x - mean(xs)) ** 2)));
+
+function drawRepeats() {
+  const svg = $("repeats"); svg.innerHTML = "";
+  if (!S.repeats.length) { $("repcap").innerHTML = ""; svg.setAttribute("viewBox", "0 0 1000 0"); return; }
+  const W = 1000, L = 300, R = 20, rowH = 58, T = 10, H = T + S.repeats.length * rowH + 34;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const all = S.repeats.flatMap(r => r.scores);
+  const x0 = Math.min(-0.75, ...all) - 0.1, x1 = Math.max(1.75, ...all) + 0.1;
+  const px = v => L + (v - x0) / (x1 - x0) * (W - L - R);
+  const bottom = T + S.repeats.length * rowH;
+  el("rect", { x: px(x0), y: T, width: px(0.5) - px(x0), height: bottom - T, fill: "color-mix(in srgb, var(--down) 8%, transparent)" }, svg);
+  el("rect", { x: px(0.5), y: T, width: px(x1) - px(0.5), height: bottom - T, fill: "color-mix(in srgb, var(--up) 8%, transparent)" }, svg);
+  el("line", { x1: px(0.5), x2: px(0.5), y1: T, y2: bottom, stroke: "var(--ink)", "stroke-width": 1.5, "stroke-dasharray": "6 5" }, svg);
+  for (let v = Math.ceil(x0 * 2) / 2; v <= x1; v += 0.5)
+    el("text", { x: px(v), y: bottom + 18, "text-anchor": "middle", class: "axis-label" }, svg).textContent = v;
+  el("text", { x: px(x0) + 6, y: bottom + 32, class: "axis-label" }, svg).textContent = "← says 0";
+  el("text", { x: px(x1) - 6, y: bottom + 32, "text-anchor": "end", class: "axis-label" }, svg).textContent = "says 1 →";
+  S.repeats.forEach((r, i) => {
+    const cy = T + i * rowH + rowH / 2;
+    if (i) el("line", { x1: 0, x2: W, y1: T + i * rowH, y2: T + i * rowH, class: "tick" }, svg);
+    const ones = r.predictions.filter(p => p === 1).length, n = r.scores.length;
+    const name = r.name.length > 42 ? r.name.slice(0, 41) + "…" : r.name;
+    tip(el("text", { x: 0, y: cy - 6, style: `font-weight:600;font-size:13px;fill:var(--ink)` }, svg), r.name).textContent = (i === 0 ? "latest: " : "") + name;
+    el("text", { x: 0, y: cy + 12, class: "axis-label" }, svg).textContent = r.answer === null
+      ? `${ones} of ${n} say 1 · ${n - ones} say 0`
+      : `${r.predictions.filter(p => p === r.answer).length} of ${n} correct (answer ${r.answer})`;
+    r.scores.forEach((s, k) => tip(el("circle", { cx: px(s), cy: cy + (k % 3 - 1) * 7, r: 7, fill: s > 0.5 ? "var(--up)" : "var(--down)",
+      stroke: "var(--card)", "stroke-width": 2, opacity: 0.85 }, svg), `trial ${k + 1}: score ${s.toFixed(2)}`));
+    el("line", { x1: px(mean(r.scores)), x2: px(mean(r.scores)), y1: cy - 18, y2: cy + 18, stroke: "var(--ink)", "stroke-width": 2.5 }, svg);
+  });
+  // compare the latest two rows: is the gap between their averages bigger than the trial-to-trial noise?
+  let cap = `Each dot is one trial; the black tick is the average. Scores in the latest row range from
+    <b>${Math.min(...S.repeats[0].scores).toFixed(2)}</b> to <b>${Math.max(...S.repeats[0].scores).toFixed(2)}</b>: that spread is pure noise.`;
+  if (S.repeats.length > 1) {
+    const [a, b] = S.repeats, gap = Math.abs(mean(a.scores) - mean(b.scores));
+    const noise = Math.sqrt((sd(a.scores) ** 2 + sd(b.scores) ** 2) / 2) || 1e-9, k = gap / noise;
+    cap += ` <br>Latest two rows: averages <b>${mean(a.scores).toFixed(2)}</b> vs <b>${mean(b.scores).toFixed(2)}</b>, a gap of
+      <b>${k.toFixed(1)}×</b> the trial-to-trial spread. ` + (k < 1 ? "That's within the noise: <b>the change didn't really matter</b>."
+      : k < 2 ? "Some difference, but the rows overlap: <b>maybe</b> it mattered; try another ×10 to be sure."
+      : "The rows clearly separate: <b>the change mattered</b> to how the neurons responded.");
+  }
+  $("repcap").innerHTML = cap;
+}
+
+// ============================================================ the clock: draw everything at time t
+function render(t) {
+  const r = S.trial; if (!r) return;
+  t = clamp(t, 0, S.D);
+  S.t = t;
+  $("scrub").value = t; $("clock").textContent = `${t.toFixed(1)} ms`;
+  S.tlCursor?.setAttribute("x1", tx(t)); S.tlCursor?.setAttribute("x2", tx(t)); S.tlCursor?.setAttribute("opacity", t <= S.R ? 1 : 0);
+  S.rCursor.setAttribute("x1", rx(t)); S.rCursor.setAttribute("x2", rx(t));
+  S.aCursor?.setAttribute("x1", rx(t)); S.aCursor?.setAttribute("x2", rx(t));
+  S.aClip?.setAttribute("width", Math.max(0, rx(t) - rx(0)));
+
+  // neurons + raster
+  let shown = 0, recent = 0;
+  const fired = new Set();
+  r.spikes.forEach(([, i, st], k) => { const on = st <= t; S.ticks[k].classList.toggle("shown", on); if (on) { shown++; fired.add(i); if (st > t - 2) recent++; } });
+  S.neuronNodes.forEach((n, i) => {
+    const times = r.byNeuron[i];
+    const cls = !times ? "neuron" : times.some(st => st <= t && st > t - 1.5) ? "neuron firing" : times.some(st => st <= t) ? "neuron fired" : "neuron";
+    if (n.getAttribute("class") !== cls) n.setAttribute("class", cls);
+  });
+  const zapping = r.pulses.filter(([pt]) => pt <= t && t <= pt + 1);
+  for (const ch of S.rows) S.elecNodes[ch]?.classList.toggle("zap", zapping.some(([, pc]) => pc === ch));
+  $("st-spikes").textContent = shown; $("st-neurons").textContent = fired.size; $("st-recent").textContent = recent;
+
+  // what's happening now
+  const soon = r.pulses.find(([pt]) => pt > t && pt - t < 2);
+  const after = r.pulses.filter(([pt]) => t > pt + 1 && t - pt < 8).pop();
+  $("now").innerHTML = zapping.length ? `<b>⚡ Zap!</b> ${zapping.map(z => `electrode ${z[1]} at ${z[2]} µA`).join(", ")}. Nearby neurons are about to fire.`
+    : recent > 8 ? `<b>Neurons responding:</b> ${recent} fired in the last 2 ms.`
+    : after ? `<b>Recovering:</b> the neurons that just fired can't fire again yet, so a pulse now gets a weaker response. That's short-term memory the readout can use.`
+    : soon ? `<b>Quiet, a pulse is coming up</b> at ${soon[0]} ms.`
+    : t > S.R ? `<b>Past the readout window:</b> the answer was decided at ${S.R} ms. This is just the network settling back down.`
+    : recent > 0 ? `<b>Background noise:</b> a few random spikes.`
+    : t >= S.D ? `<b>Trial over.</b> Drag back to replay any moment.`
+    : `<b>Quiet.</b> Nothing much happening at ${t.toFixed(1)} ms.`;
+
+  // decoding + readout: windows count once they close
+  const done = Math.min(r.votes.length, Math.floor(t / r.bin_ms + 1e-9));
+  if (S.cells) {
+    for (const [c, j] of S.cells) c.setAttribute("fill", j < done ? c.dataset.fill : "var(--lane)");
+    S.nowCol.setAttribute("x", S.heatX(Math.min(done, r.votes.length - 1)) );
+    S.nowCol.setAttribute("opacity", done < r.votes.length ? 1 : 0);
+  }
+  for (const [c, j] of S.wCells ?? []) c.setAttribute("fill", j < done ? c.dataset.fill : "var(--lane)");
+  S.wfBars.forEach((g, i) => g.setAttribute("opacity", i === 0 || i <= done ? 1 : 0));
+  const score = r.path[done][0], spikesSoFar = r.path[done][1], final = t >= S.R;
+  const y = S.wfY;
+  S.outBar.setAttribute("y", Math.min(y(0), y(score))); S.outBar.setAttribute("height", Math.max(2, Math.abs(y(0) - y(score))));
+  S.outBarLabel.setAttribute("y", Math.min(y(0), y(score)) - 5); S.outBarLabel.textContent = score.toFixed(2);
+  S.outBarName.textContent = final ? "output" : "so far";
+
+  // moving dot on the straight-cut plot
+  const pts = r.path.slice(0, done + 1).map(([s, n]) => `${S.cpx(s)},${S.cpy(n)}`).join(" ");
+  S.trail.setAttribute("points", pts);
+  const yx = S.cpx(score), yy = S.cpy(spikesSoFar);
+  S.you.setAttribute("cx", yx); S.you.setAttribute("cy", yy);
+  S.youLabel.setAttribute("x", clamp(yx, CP.L + 40, CP.W - CP.R - 40)); S.youLabel.setAttribute("y", yy - 16);
+  $("cloudcap").innerHTML = `<b>${S.cloudRight} of ${S.cloud.length}</b> past trials (${Math.round(100 * S.cloudRight / S.cloud.length)}%) land on the correct side, vs. ${pct(S.bestLine)} for the best line on the raw inputs. ` +
+    (final ? `Your trial finished at score <b>${score.toFixed(2)}</b>.` : `Your trial's score so far: <b>${score.toFixed(2)}</b> (after ${done} of ${r.votes.length} windows).`);
+
+  // output
+  $("outnum").textContent = score.toFixed(2);
+  $("outcap").textContent = final ? "final score" : `score so far, at ${t.toFixed(1)} ms (the real decision happens at the end)`;
+  $("needle").style.left = `${clamp((score + 0.5) / 2 * 100, 1, 99)}%`;
+  $("offscale").textContent = score < -0.5 ? "◀ off the scale to the left (strongly says 0)" : score > 1.5 ? "off the scale to the right (strongly says 1) ▶" : "";
+  if (final) finishTrial(r); else if (!r.done) $("verdict").innerHTML = "";
+}
+
+// ============================================================ run + playback
+async function run() {
+  const btn = $("run");
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Simulating ${S.neurons.length} neurons…`;
+  const sent = S.pulses.slice();
+  const r = await (await fetch("/api/run", { method: "POST", body: JSON.stringify({ pulses: sent, duration: S.R }) })).json();
+  r.pulses = sent.map(p => [...p]);
+  S.D = r.duration; $("scrub").max = S.D;
+  drawActivity(r);
+  r.byNeuron = {};
+  for (const [, i, t] of r.spikes) (r.byNeuron[i] ??= []).push(t);
+  // the readout's running total after each window closes, and spikes counted so far: [score, spikes]
+  const counts = r.grid ? r.votes.map((_, j) => r.grid.reduce((a, row) => a + row[j], 0)) : r.votes.map(() => 0);
+  r.path = [[r.start, 0]];
+  r.votes.forEach((v, j) => r.path.push([r.path[j][0] + v, r.path[j][1] + counts[j]]));
+  if (!r.grid) r.path[r.path.length - 1][1] = r.total;
+  S.trial = r;
+  S.binMs = r.bin_ms;
+  drawRaster(r); drawHeat(r); drawWeights(r); drawCloud(r); drawWaterfall(r); tellStory(r);
+  for (const ring of Object.values(S.rawDots ?? {})) ring.setAttribute("opacity", 0);
+  $("player").classList.remove("off");
+  btn.disabled = false; changed();
+  render(0); play(true);
+  if (S.fast) render(S.D);
+}
+
+function play(on) { S.playing = on; $("play").textContent = on ? "⏸" : "▶"; if (on && S.t >= S.D) S.t = 0; S.last = performance.now(); }
+function loop(now) {
+  requestAnimationFrame(loop);   // schedule the next frame first, so one bad frame can't stop playback
+  const dt = Math.max(0, now - S.last) / 1000;   // frame timestamps can be slightly older than a click
+  S.last = now;
+  if (S.playing && S.trial) {
+    const seconds = clamp(S.D / 12, 5, 20);   // at 1x: a 60 ms trial plays in 5 s, a 1000 ms one in 20 s
+    S.t = clamp(S.t + dt * (S.D / seconds) * S.speed, 0, S.D);
+    render(S.t);
+    if (S.t >= S.D) play(false);
+  }
+}
+
+// ============================================================ boot
+(async function boot() {
+  const s = await (await fetch("/api/setup")).json();
+  Object.assign(S, { weights: s.weights, binMs: s.bin_ms, bestLine: s.best_line, inputNames: s.page.input_names ?? ["input 1", "input 2"], R: s.trial_ms, D: s.trial_ms, repeats: [], brushDefault: s.amplitude, sel: -1, brush: s.amplitude, rows: s.rows, presets: s.presets, neurons: s.neurons, electrodes: s.electrodes,
+    trainedAmp: s.amplitude, nFeatures: s.n_features, raw: s.raw, rawCoef: s.raw_coef, rawStart: s.raw_start, cloud: s.cloud });
+  $("taskname").textContent = `· ${s.task}`;
+  document.title = `Neural Playground · ${s.task}`;
+  // The page is generic; a task file can override any [data-text] section via its PLAYGROUND dict.
+  for (const [key, value] of Object.entries(s.page ?? {})) {
+    const node = document.querySelector(`[data-text="${key}"]`);
+    if (!node) continue;
+    node.innerHTML = Array.isArray(value) ? value.map(v => `<li>${v}</li>`).join("") : value;
+    node.hidden = false;
+  }
+  const per = Math.round(s.n_train / s.presets.length);
+  $("trainmix").textContent = `${per} each of ${s.presets.map(p => p.label).join(", ")}`;
+  $("besttag").textContent = `best: ${pct(s.best_line)}`;
+  $("beattag").textContent = `vs. ${pct(s.best_line)} without neurons`;
+  $("basewhy").innerHTML = s.best_line >= 0.999
+    ? `The same kind of model fed just the raw inputs. Here a straight line can already get <b>100%</b>: this task doesn't need the
+       neurons for accuracy, which makes it a useful control.`
+    : `The same kind of model fed just the raw inputs. The best any straight line can do here is <b>${pct(s.best_line)}</b>.
+       That's the bar the neurons have to clear.`;
+  document.querySelectorAll(".nf").forEach(e => e.textContent = s.n_features);
+  document.querySelectorAll(".ntrain").forEach(e => e.textContent = s.n_train);
+  document.querySelectorAll(".nch2").forEach(e => e.textContent = s.n_channels);
+  $("nneurons").textContent = s.neurons.length; $("nch").textContent = s.n_channels;
+
+  for (const p of s.presets) {
+    const b = document.createElement("button");
+    b.className = "chip"; b.dataset.label = p.label;
+    b.innerHTML = `${p.label}<small>→ ${p.answer}</small>`;
+    b.onclick = () => loadPreset(p);
+    $("presets").appendChild(b);
+  }
+  for (const [label, v] of [["0.25×", 0.25], ["0.5×", 0.5], ["1×", 1], ["2×", 2]]) {
+    const b = document.createElement("button");
+    b.textContent = label; b.className = v === 1 ? "on" : "";
+    b.onclick = () => { S.speed = v; [...$("speeds").children].forEach(c => c.classList.toggle("on", c === b)); };
+    $("speeds").appendChild(b);
+  }
+  $("amp").oninput = e => setStrength(+e.target.value);
+  $("delpulse").onclick = () => { S.pulses.splice(S.sel, 1); S.sel = -1; changed(); };
+  $("trainedtick").textContent = `▲ ${s.amplitude} trained`;
+  $("trainedtick").style.left = `${(s.amplitude - AMP_MIN) / (AMP_MAX - AMP_MIN) * 100}%`;
+  $("amp").style.background = ampGradient();
+  document.addEventListener("keydown", e => {   // Delete / arrows edit the selected pulse
+    if (S.sel < 0 || e.target.tagName === "INPUT") return;
+    if (e.key === "Delete" || e.key === "Backspace") { S.pulses.splice(S.sel, 1); S.sel = -1; changed(); e.preventDefault(); }
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") { setStrength(S.pulses[S.sel][2] + (e.key === "ArrowUp" ? 5 : -5)); e.preventDefault(); }
+    if (e.key === "Escape") { S.sel = -1; changed(); }
+  });
+  $("clear").onclick = () => { S.pulses = []; changed(); };
+  $("run").onclick = run;
+  $("repeat").onclick = runRepeat;
+  $("repclear").onclick = () => { S.repeats = []; drawRepeats(); };
+  $("play").onclick = () => play(!S.playing);
+  $("restart").onclick = () => { play(false); render(0); };
+  $("scrub").oninput = e => { play(false); render(+e.target.value); };
+  changed();
+  drawMap(); drawRaster(null); drawActivity(null); drawRawPlot(); drawCloud(null); drawWeights(null);
+  requestAnimationFrame(loop);
+  const q = new URLSearchParams(location.search);   // ?auto=(1, 1)&fast for screenshots
+  S.fast = q.has("fast");
+  loadPreset(s.presets.find(p => p.label === q.get("auto")) ?? s.presets[s.presets.length - 1]);
+  if (q.has("auto")) run();
+})();
+</script>
+</body>
+</html>

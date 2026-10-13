@@ -1,0 +1,6 @@
+livn==2.0.0
+numpy==2.5.4
+scipy==1.18.1
+matplotlib==3.11.2
+# the saved readout (playground/saved_demo_xor.pkl) was trained with this version; keep them matched
+scikit-learn==1.9.1
