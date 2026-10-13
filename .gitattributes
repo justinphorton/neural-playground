@@ -1,0 +1,3 @@
+# The playground page is one large HTML/JS file; leave it out of GitHub's language stats
+# so the repo is reported as Python (the simulation, tasks and server).
+playground/web.html linguist-detectable=false
