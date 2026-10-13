@@ -4,6 +4,8 @@ A testbed for **neural reservoir computing**: encode an input as electrical stim
 
 The repo has two parts: experiments (task files) and an interactive web playground that runs the simulation and shows every stage of the pipeline. The playground is the best place to build intuition; this README covers what the project does and how it's implemented.
 
+**Live demo:** the XOR playground is hosted at **https://neural-playground-3bsb.onrender.com/**. Each trial runs a real simulation, so a send takes a few seconds.
+
 ![The web playground](docs/playground.png)
 
 ## Quick start
