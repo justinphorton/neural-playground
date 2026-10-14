@@ -79,14 +79,56 @@ def train_or_load(task, env, encoding, decoding, retrain=False):
             return saved
 
     dataset = task.make_dataset()
-    print(f"Training the readout on {len(dataset)} trials (one time only, ~2 s each)...")
-    X, y = task.collect_trials(env, encoding, decoding, dataset)[:2]
+    print(f"Training the readout on {len(dataset)} trials, {WORKERS} at a time (one time only)...")
+    X, y, dataset = collect_parallel(task, dataset)
     readout = LinearRegression().fit(X, y)  # the ONLY training in the whole pipeline
-    saved = {"readout": readout, "X": X, "y": y, "inputs": np.array(dataset, dtype=float)}
+    saved = {"readout": readout, "X": X.astype(np.float32), "y": y, "inputs": np.array(dataset, dtype=float)}
     with open(path, "wb") as f:
         pickle.dump(saved, f)
     print(f"Saved trained readout to {path}")
     return saved
+
+
+# Training trials are independent, so they can run in parallel: each worker process
+# builds its own copy of the (identical) network and simulates a share of the trials.
+# Set PLAYGROUND_WORKERS=1 to run them one at a time instead.
+WORKERS = int(os.environ.get("PLAYGROUND_WORKERS", max(1, min(12, (os.cpu_count() or 2) - 2))))
+
+
+def _collect_chunk(job):
+    """Runs in a worker process: one chunk of training trials on that worker's own network."""
+    import contextlib
+    import io
+
+    task_name, chunk, noise_stream = job
+    task = importlib.import_module(task_name)
+    with contextlib.redirect_stdout(io.StringIO()):  # keep each worker's per-trial progress quiet
+        env = task.build_reservoir()
+        encoding, decoding = task.make_pipeline(env)
+        env.reseed_noise(stream=noise_stream)  # its own noise, so no two workers repeat a trial
+        X, y = task.collect_trials(env, encoding, decoding, chunk)[:2]
+    return np.asarray(X), np.asarray(y), chunk
+
+
+def collect_parallel(task, dataset, workers=None):
+    """Run task.collect_trials on `dataset`, split across worker processes.
+
+    Returns (X, y, inputs) with inputs in the same order as the rows of X.
+    """
+    from concurrent.futures import ProcessPoolExecutor
+
+    workers = max(1, min(workers or WORKERS, len(dataset)))
+    chunks = [dataset[i::workers] for i in range(workers)]  # interleaved, so every chunk has every input
+    base = random.randint(10**6, 10**8)
+    jobs = [(task.__name__, chunk, base + k * 100_000) for k, chunk in enumerate(chunks)]
+    X, y, inputs = [], [], []
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        for k, (Xc, yc, chunk) in enumerate(pool.map(_collect_chunk, jobs), start=1):
+            print(f"  {k}/{workers} workers done")
+            X.append(Xc)
+            y.append(yc)
+            inputs += chunk
+    return np.vstack(X), np.concatenate(y), inputs
 
 
 def line_pictures(saved):
@@ -104,8 +146,13 @@ def line_pictures(saved):
             "answer": int(y[(inputs == u).all(axis=1)][0])} for u in unique]
     scores = cross_val_predict(LinearRegression(), X, y, cv=5)
     cloud = [[round(float(s), 3), int(t), int(a)] for s, t, a in zip(scores, X.sum(axis=1), y)]
+    right = (scores > 0.5) == y
+    heldout = [{"input": u.tolist(), "answer": int(y[(inputs == u).all(axis=1)][0]),
+                "trials": int((inputs == u).all(axis=1).sum()),
+                "accuracy": float(right[(inputs == u).all(axis=1)].mean())} for u in unique]
     return {"raw": raw, "raw_coef": raw_fit.coef_.tolist(), "raw_start": float(raw_fit.intercept_),
-            "cloud": cloud, "best_line": best_line_accuracy(inputs, y)}
+            "cloud": cloud, "best_line": best_line_accuracy(inputs, y),
+            "heldout": heldout, "heldout_accuracy": float(right.mean())}
 
 
 def best_line_accuracy(inputs, y, n_directions=4000):
@@ -149,6 +196,7 @@ class Lab:
         saved = train_or_load(task, self.env, self.encoding, self.decoding, retrain)
         self.readout = saved["readout"]
         self.pictures = line_pictures(saved)
+        self.training = self.training_summary(saved)
         fresh_noise(self.env)
 
         # The task's inputs, written as the pulses its encoding would deliver
@@ -160,9 +208,9 @@ class Lab:
         ]
 
         # Timeline rows: the electrodes the task uses, then a few strong neighbours
-        used = sorted({pulse[1] for p in self.presets for pulse in p["pulses"]})
-        extra = [ch for ch in task.strongest_electrodes(self.env, n=6) if ch not in used]
-        self.rows = (used + extra)[:4]
+        self.used = sorted({pulse[1] for p in self.presets for pulse in p["pulses"]})
+        extra = [ch for ch in task.strongest_electrodes(self.env, n=6) if ch not in self.used]
+        self.rows = (self.used + extra)[:4]
 
         # Where our neurons and electrodes sit in the dish (micrometers)
         gids = set(int(g) for g in self.env.simulated_gids())
@@ -175,9 +223,23 @@ class Lab:
         self.in_view = [int(e[0]) for e in elec if (lo <= e[1:3]).all() and (e[1:3] <= hi).all()]
         self.elec_xy = {int(e[0]): e[1:3] for e in elec}
 
-        # Raster order: nearest neuron to the main electrode at the bottom
-        distance = np.linalg.norm(self.xy - self.elec_xy[self.rows[0]], axis=1)
+        # Raster order: neurons nearest a stimulating electrode at the bottom
+        distance = np.min([np.linalg.norm(self.xy - self.elec_xy[e], axis=1) for e in self.used or self.rows[:1]], axis=0)
         self.raster_row = np.argsort(np.argsort(distance))
+
+    def training_summary(self, saved):
+        """How the readout was trained, for the page's "Training results" card."""
+        X, y = saved["X"], saved["y"]
+        jitter = getattr(self.task, "JITTER_MS", 0) if getattr(self.encoding, "vary", False) else 0
+        amp_range = getattr(self.task, "AMPLITUDE_RANGE_UA", None) if getattr(self.encoding, "vary", False) else None
+        return {
+            "trials": int(len(y)),
+            "train_accuracy": float(((self.readout.predict(X) > 0.5) == y).mean()),
+            "active_features": int((np.asarray(X) != 0).any(axis=0).sum()),
+            "jitter_ms": float(jitter or 0),
+            "amplitude_range": list(amp_range) if amp_range else None,
+            "electrodes": [int(c) for c in getattr(self.encoding, "channels", [])],
+        }
 
     def weight_grid(self):
         """The readout's learned weights laid out like the fingerprint: [electrode in view][time window].
@@ -206,6 +268,8 @@ class Lab:
             "bin_ms": self.task.TRIAL_MS * self.env.io.num_channels / self.readout.n_features_in_,
             "page": getattr(self.task, "PLAYGROUND", {}),   # the task's own page text (optional)
             "n_train": int(len(self.pictures["cloud"])),
+            "used": self.used,
+            "training": self.training,
             **self.pictures,
         }
 

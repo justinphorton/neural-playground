@@ -46,6 +46,13 @@ AMPLITUDE_UA = 40.0  # pulse strength in microamps (livn refuses above ~150)
 BIN_MS = 5  # decoding time resolution: count spikes per this many ms
 TRIALS_PER_INPUT = 20  # repeats per input (each repeat has different background noise)
 
+# Optional: train on slightly varied pulses so small input changes don't break the
+# readout. Off by default (0 and None). XOR uses JITTER_MS = 1.5 and (30.0, 50.0).
+# With variation on, use many more trials (XOR uses 250 per input), because plain
+# linear regression memorizes noise when it has few examples.
+JITTER_MS = 0.0  # each training pulse lands up to this far from its nominal time
+AMPLITUDE_RANGE_UA = None  # e.g. (30.0, 50.0): each training pulse's strength is drawn from this range
+
 # livn downloads the network's wiring into ./systems/ (gitignored)
 DATA_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the repo folder
 
@@ -92,16 +99,18 @@ def make_dataset():
 #        That list IS your encoding: playground.py draws it on its timeline.
 # EXAMPLE (XOR): bit 1 at 20 ms, bit 2 at 26 ms, only the bits that are 1:
 #            onsets = (20.0, 26.0)
-#            return [(t, self.channel) for bit, t in zip(inputs, onsets) if bit == 1]
+#            return [(t, ch) for bit, t in zip(inputs, onsets) if bit == 1 for ch in self.channels]
 # TIPS:  - Timing is everything. For the network to MIX two inputs, put them
 #          a few ms apart (XOR: 6 ms worked, 30 ms failed).
-#        - Want several input "channels"? Use several electrodes: get more
-#          with strongest_electrodes(env, n=3) (section 6), store them in a
-#          field like `channels: list[int]`, and pulse different ones.
+#        - self.channels is a list of electrodes (set in make_pipeline). Firing
+#          two neighbouring electrodes together for each input recruits more
+#          neurons and made XOR noticeably more reliable. You can also pulse
+#          different electrodes for different inputs.
 # ===========================================================================
 class MyEncoding(Encoding):
-    channel: int  # which electrode to stimulate (set in make_pipeline)
+    channels: list[int]  # electrodes this task can stimulate (set in make_pipeline)
     amplitude_ua: float = AMPLITUDE_UA
+    vary: bool = False  # training: nudge each pulse's timing/strength (see JITTER_MS, AMPLITUDE_RANGE_UA)
     dt: float = 0.1  # time resolution of the stimulus, in ms
 
     def pulses(self, inputs):
@@ -112,10 +121,19 @@ class MyEncoding(Encoding):
         n_steps = int(t_end / self.dt)
         electrodes = np.zeros((n_steps, env.io.num_channels), dtype=np.float32)
 
-        # (leave this) one 1 ms pulse for every (time, electrode) from pulses()
+        # (leave this) one 1 ms pulse for every (time, electrode) from pulses().
+        # With vary=True, pulses at the same time share one random nudge in time and
+        # strength, so electrodes that fire together still fire together.
+        nudges = {}
         for t, ch in self.pulses(inputs):
-            start = int(t / self.dt)
-            electrodes[start:start + int(1.0 / self.dt), ch] = self.amplitude_ua
+            if t not in nudges:
+                shift = np.random.uniform(-JITTER_MS, JITTER_MS) if self.vary else 0.0
+                strength = (np.random.uniform(*AMPLITUDE_RANGE_UA)
+                            if self.vary and AMPLITUDE_RANGE_UA else self.amplitude_ua)
+                nudges[t] = (shift, strength)
+            shift, strength = nudges[t]
+            start = int((t + shift) / self.dt)
+            electrodes[start:start + int(1.0 / self.dt), ch] = strength
 
         # (leave this) the electrode model turns currents into per-neuron stimulus
         return env.cell_stimulus(electrodes, dt=self.dt)
@@ -178,8 +196,14 @@ def strongest_electrodes(env, n=1):
 
 
 def make_pipeline(env):
-    """The Encoding + Decoding this task uses (playground.py calls this too)."""
-    return MyEncoding(channel=strongest_electrodes(env)[0]), MyDecoding()
+    """The Encoding + Decoding this task uses (playground.py calls this too).
+
+    TODO (optional): use strongest_electrodes(env, n=2) to give the encoding two
+    electrodes (XOR uses the strongest one plus its nearest neighbour).
+    """
+    encoding = MyEncoding(channels=strongest_electrodes(env, n=1),
+                          vary=JITTER_MS > 0 or AMPLITUDE_RANGE_UA is not None)
+    return encoding, MyDecoding()
 
 
 # ===========================================================================
@@ -257,6 +281,7 @@ def main():
 #        "raster"       what to look for in the spikes (step 2)
 #        "windows"      what each time window ended up meaning (step 4)
 #        "baseline"     why a line on the raw inputs does / doesn't work (step 7)
+#        "training"     how your readout was trained / tested (step 9)
 #        "ideas"        a LIST of "things to try" (the big-picture card)
 # NOTE:  the playground handles: yes/no answers (0 or 1), 1 ms pulse encodings
 #        with an `amplitude_ua` setting, up to 4 electrodes on its timeline, and

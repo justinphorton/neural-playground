@@ -28,7 +28,7 @@ This opens the playground at http://localhost:8765. Pick an input, press **Send 
 
 | Command | What it does |
 |---|---|
-| `python tasks/demo_xor.py` | Runs the XOR experiment: trains, tests, compares against the baseline, shows spike rasters |
+| `python tasks/demo_xor.py` | Runs the XOR experiment: trains, tests, compares against the baseline, shows spike rasters (1,000 trials one at a time, ~25 min) |
 | `python playground/web.py <task>` | Opens the playground for any task in `tasks/` |
 | `python playground/web.py <task> --retrain` | Retrains that task's saved readout |
 
@@ -62,13 +62,26 @@ If a linear readout solves XOR after the reservoir, the reservoir must have prod
 
 ![The same linear regression before and after the reservoir](docs/xor_solved.png)
 
-On held-out trials, the readout on the reservoir's features reaches **80–90% accuracy** (90% on the demo's test split); the same linear regression on the raw bits stays at chance.
-
 **Timing is the key design parameter.** The reservoir only helps if bit 2 arrives while the network is still responding to bit 1. Right after a burst, many neurons are refractory and synapses are partly depleted, so the second burst is weaker and involves a different set of electrodes. That difference is the "both bits on" signal. With a 30 ms gap the network recovers completely, the response is just the sum of two independent bursts, and accuracy drops to chance.
 
 | Gap between bits | 3 ms | **6 ms** | 10 ms | 30 ms |
 |---|---|---|---|---|
-| Accuracy (quick sweep) | ~75% | **~90%** | ~71% | ~60% |
+| Accuracy (quick sweep, initial single-electrode setup) | ~75% | **~90%** | ~71% | ~60% |
+
+### Current performance
+
+Each bit fires two neighbouring electrodes (3 and 51) together, and the readout (plain linear regression) is trained on 1,000 trials whose pulses vary by up to ±1.5 ms and 30–50 µA. Tested on fresh trials it never saw (192 per condition):
+
+| Test inputs | Accuracy |
+|---|---|
+| Normal (bits at 20/26 ms, 40 µA) | **86%** |
+| Slightly changed (±0.5 ms, 35 µA) | **90%** |
+| Anywhere in the training range (±1.5 ms, 30–50 µA) | **82%** |
+| Same linear regression on the raw bits | chance |
+
+Held-out accuracy per input on the training set: (0, 0) 93%, (0, 1) 80%, (1, 0) 86%, (1, 1) 71%. (1, 1) is the hardest case, since it depends on reading the weaker second burst.
+
+The initial version used a single electrode and 100 training trials with exact timing. It scored 75%, 68% and 65% on the same three tests and was fragile: shifting a pulse by 0.5 ms or weakening it by 5 µA could flip the answer. Two electrodes per bit, training variation, and more training trials fixed that. That version is kept in git under the tag `xor-fixed-timing`.
 
 ## Implementation
 
@@ -79,37 +92,19 @@ On held-out trials, the readout on the reservoir's features reaches **80–90% a
 - **Trials:** one fixed network is reused for every trial. `env.clear()` resets it and draws fresh background noise, so trials are independent and noisy, like repeated recordings of the same culture. Each trial is a single `env(decoding, inputs=..., encoding=...)` call.
 
 ### XOR task ([`tasks/demo_xor.py`](tasks/demo_xor.py))
-- **Encoding** (`TemporalBitsEncoding`, a livn `Encoding`): each input becomes a list of `(time, electrode)` pulses. A 1 is a 1 ms, 40 µA pulse on the electrode that couples most strongly into the patch: bit 1 at 20 ms, bit 2 at 26 ms. A 0 is no pulse.
+- **Encoding** (`TemporalBitsEncoding`, a livn `Encoding`): each input becomes a list of `(time, electrode)` pulses. A 1 is a 1 ms, 40 µA pulse fired on **two neighbouring electrodes at once**: the electrode that couples most strongly into the patch (3) and its closest strong neighbour (51). Bit 1 fires at 20 ms, bit 2 at 26 ms; a 0 is no pulse. Driving two electrodes recruits more neurons and makes the weaker second burst in (1, 1) easier to read: with a single electrode, (1, 1) was close to chance.
+- **Training variation:** training trials jitter each pulse by up to ±1.5 ms and draw its strength from 30–50 µA, so the readout learns which differences matter instead of memorizing one exact pattern. Without it, shifting a pulse by 0.5 ms or weakening it by 5 µA was enough to break the readout.
 - **Decoding** (`BinnedChannelCounts`, a livn `Decoding`): spike counts per electrode in 5 ms windows over the 60 ms trial, 128 × 12 = **1,536 features**. Decoding is per electrode, not per neuron, because that's what a real electrode array measures.
-- **Readout:** scikit-learn `LinearRegression`, thresholded at 0.5, trained on 100 trials (25 per input) with a 70/30 train/test split.
+- **Readout:** scikit-learn `LinearRegression`, thresholded at 0.5, trained on 1,000 trials (250 per input). Plain least squares needs many trials here: with ~170 informative features and few examples it fits the noise. `demo_xor.py` evaluates with a 70/30 train/test split.
 - **Baseline:** the same readout trained on the raw bits.
 
 ### Task files ([`tasks/`](tasks))
 Each experiment is a single file with nine sections: settings, task definition, data generation, encoding, decoding, reservoir, feature collection, readout and evaluation, main. `demo_xor.py` is the reference implementation. `template_task.py` has the same structure with TODOs and a planning block (task, input, encoding, decoding, hypothesis, metric).
 
-To add an experiment, copy the template into `tasks/`, fill in the plan and TODOs, and run it with `python tasks/my_task.py`. It works in the playground (`python playground/web.py my_task`) as long as it defines `INPUTS`, `target()`, `TRIAL_MS`, `make_dataset()`, `build_reservoir()`, `strongest_electrodes()`, `make_pipeline()`, `collect_trials()`, and an encoding with a `pulses(input)` method. The template includes all of these.
-
-The playground page is generic: every section has default text, and the "best straight line on the raw inputs" baseline is computed per task (75% for XOR, 100% for a linearly separable task). A task can optionally define a `PLAYGROUND` dict to replace any section's text with task-specific explanations (tagline, encoding, things to try, and so on). `demo_xor.py` uses it for the XOR walkthrough; `template_task.py` lists the available keys.
+To add an experiment, copy the template into `tasks/`, fill in the plan and TODOs, and run it with `python tasks/my_task.py`. Anything built from the template also runs in the playground (`python playground/web.py my_task`).
 
 ### Playground ([`playground/`](playground))
-- **`web.py`:** a standard-library HTTP server that holds one livn network and the trained readout. Endpoints: `GET /api/setup`, `POST /api/run` (one trial with user-drawn pulses), `POST /api/repeat` (the same pulses ×N with fresh noise).
-- **`web.html`:** the page, in plain HTML and JavaScript. It visualizes each stage (stimulation timeline, network activity, spike raster, the feature grid, readout weights × features, the score, the raw-bits baseline, repeat-trial consistency), with playback to scrub through a trial.
-- The readout is trained once and saved to `playground/saved_<task>.pkl`. The XOR readout is committed so a fresh clone or hosted copy starts immediately. Retrain with `--retrain` after changing a task's encoding, decoding, timing or network size.
-
-#### Playground scope
-
-The playground is built around the task-file format above and works for any task within these limits:
-
-- **One task per server.** `python playground/web.py <task>` serves that task only; there's no switching between tasks on the page.
-- **Yes/no answers.** The readout output is thresholded at 0.5. Tasks with three or more classes would need the output, waterfall and comparison plots extended.
-- **Pulse encodings.** Inputs must be expressible as `pulses(input) → [(time_ms, electrode), ...]` with 1 ms pulses at the encoding's `amplitude_ua`. Other stimulus types (continuous currents, optogenetics) aren't supported.
-- **Up to 4 electrodes on the timeline.** The page shows the electrodes the task uses plus the strongest neighbours, capped at 4 lanes.
-- **Electrode × time-window features** for the fingerprint, weights and votes panels. Other decodings still run, but those panels show a placeholder.
-- **Inputs as tuples of numbers.** The raw-input baseline is drawn as a square with a movable line only for 2-input tasks; other tasks get a list of scores.
-- **Linear regression readout**, trained once per task and saved to `playground/saved_<task>.pkl`; retrain after changing the task.
-- **Trials up to 1 s**, run one at a time on a single shared network. First-time training blocks the server until it finishes.
-
-Going past these (multi-class outputs, selecting between tasks in the page, other stimulus types) means extending `web.py` and `web.html` or restructuring the playground.
+A small web app for exploring a task interactively: `web.py` runs the livn simulation and readout behind a standard-library HTTP server, and `web.html` visualizes each stage of a trial. It trains a task's readout once (in parallel worker processes) and saves it to `playground/saved_<task>.pkl`; the XOR readout is committed so it starts immediately. It's built around the current task-file format (one yes/no task per server, 1 ms pulse encodings, electrode × time-window features), and a task can add its own page text through an optional `PLAYGROUND` dict. Anything beyond that means extending or replacing it.
 
 ### Hosting
 When the `PORT` environment variable is set (as on Render), `web.py` listens on `0.0.0.0:$PORT` and doesn't open a browser; local behavior is unchanged. For Render: build command `pip install -r requirements.txt`, start command `python playground/web.py demo_xor`, environment variable `PYTHON_VERSION=3.12`. Each trial is a full simulation, so small instances are slow.
@@ -121,7 +116,8 @@ When the `PORT` environment variable is set (as on Render), `web.py` listens on 
 
 - **More tasks on the same pipeline:** delayed memory, parity, sequence discrimination across electrodes, pulse counting, frequency discrimination, and spatial patterns across electrodes (a toy olfaction task; the fruit-fly mushroom body is itself a fixed random expansion with a simple readout).
 - **Readouts:** ridge regression for more stable single-trial predictions, multi-class outputs, and rejection of unfamiliar inputs.
-- **Robustness:** training with timing jitter and shifted inputs for position-invariant recognition, and systematic sweeps over gap, strength and electrode.
+- **Robustness and invariance:** recognizing the XOR pattern at any time, not just at 20/26 ms. With fixed time windows that fails (~53% in tests); lining the windows up with the stimulus onset recovered ~70%. Also systematic sweeps over gap, strength and electrode placement.
+- **More realistic recording:** the decoder currently gets exact spike times for every neuron near an electrode. Real electrodes record noisy voltage, need threshold-based spike detection, and are blanked for a few milliseconds after each pulse by the stimulation artifact. livn can simulate the extracellular voltage (`env.potential_recording`), so the gap between idealized and realistic decoding can be measured.
 - **Reservoirs:** larger and custom cultures via livn's system generator; the `neuron` backend for large networks and `diffrax` for differentiable simulation (e.g. optimizing the stimulation itself).
 - **Beyond fixed reservoirs:** closed-loop control through livn's Gymnasium interface, and synaptic plasticity (`env.enable_plasticity()`).
 - **Real cultures:** the encode/decode split mirrors a physical electrode setup, so the same experiment structure should transfer to recordings from real cultures.

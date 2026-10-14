@@ -68,6 +68,9 @@
   .ideas h3 { margin: 0 0 6px; font-size: 14px; color: var(--ink); }
   .ideas ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
   .ideas b { color: var(--ink); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+  .tiles div { background: var(--lane); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: var(--ink-2); }
+  .tiles b { display: block; font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
   .caption { font-size: 13px; color: var(--ink-2); margin-top: 10px; }
   .caption b { color: var(--ink); }
   .empty { color: var(--ink-3); font-size: 14px; padding: 30px 0; text-align: center; }
@@ -229,7 +232,7 @@
           <li><b>Move a pulse a few ms earlier or later</b>, then compare the original and your version with <i>Run ×10</i> (step 8).
             Timing changes how pulses interact in the network.</li>
           <li><b>Weaken a pulse</b> to 15–20&nbsp;µA (little or no burst: too weak to make neurons fire) or <b>strengthen it</b> past
-            100&nbsp;µA (a bigger burst that reaches more electrodes). The readout only trained at one strength, so expect less reliable answers.</li>
+            100&nbsp;µA (a bigger burst that reaches more electrodes). Strengths far outside what the readout trained on give less reliable answers.</li>
           <li><b>Move a pulse to another electrode.</b> Different neurons respond first, and the weights were tuned to the original
             electrode's response, so the answer becomes close to arbitrary.</li>
           <li><b>Send nothing</b> (Clear, then Send). Only background noise: a few random spikes and no bursts.</li>
@@ -295,7 +298,7 @@
       <h2><span class="num">2</span>Spikes over time <span class="tag fixed">fixed</span></h2>
       <p class="why" data-text="raster">Each pulse triggers a burst that dies out within ~10&nbsp;ms, back to a low <b>background</b>
         level (never zero: there's always some noise). When and where the bursts happen, and how they interact, is what the readout can use.</p>
-      <details class="explain"><summary>More detail</summary><p>One row per neuron (nearest the electrode at the bottom), one tick
+      <details class="explain"><summary>More detail</summary><p>One row per neuron (nearest a stimulating electrode at the bottom), one tick
         per spike, blue bands = pulses. A neuron that just fired can't fire again for a moment (it's <i>refractory</i>).
         Scattered ticks are background noise, which is why no two runs are identical.</p></details>
       <div class="minihead">Population activity: spikes per ms, all neurons together</div>
@@ -420,6 +423,18 @@
       <div class="caption" id="repcap"></div>
     </section>
 
+    <!-- 9. TRAINING RESULTS -->
+    <section class="card">
+      <h2><span class="num">9</span>Training results <span class="tag trained">how the readout was trained</span></h2>
+      <p class="why" data-text="training">The readout was trained once, on the trials summarized here. <b>Held-out</b> accuracy scores
+        each training trial with a readout trained <i>without</i> it, which is how brand-new trials should do. A big gap between
+        training and held-out accuracy means the readout memorized noise.</p>
+      <div class="tiles" id="traintiles"></div>
+      <div class="minihead">Held-out accuracy per input</div>
+      <svg id="trainbars"></svg>
+      <div class="caption" id="traincap"></div>
+    </section>
+
     <!-- BEYOND THIS TASK -->
     <section class="card">
       <h2><span class="num">∞</span>Beyond this task</h2>
@@ -459,7 +474,7 @@ const laneY = i => TL.top + i * (TL.lane + TL.gap);
 const snap = t => Math.round(t * 2) / 2;   // 0.5 ms grid
 const tickStep = span => span <= 120 ? 10 : span <= 250 ? 25 : span <= 500 ? 50 : 100;
 
-// strength → color: light blue (weak) → blue (40 µA, trained) → deep navy (strong)
+// strength → color: light blue (weak) → blue (40 µA, the nominal strength) → deep navy (strong)
 const AMP_STOPS = [[5, [191, 219, 254]], [40, [59, 130, 246]], [90, [29, 78, 216]], [150, [23, 37, 84]]];
 function ampColor(a) {
   a = clamp(a, AMP_MIN, AMP_MAX);
@@ -564,10 +579,11 @@ function drawMap() {
   svg.setAttribute("viewBox", `${x0} ${y0} ${w} ${h}`);
   S.elecNodes = {};
   for (const [ch, x, y] of S.electrodes) {
-    const used = S.rows.includes(ch);
+    const used = S.used.includes(ch), lane = S.rows.includes(ch);
     S.elecNodes[ch] = tip(el("rect", { x: x - 22, y: y - 22, width: 44, height: 44, rx: 8,
-      class: "electrode" + (used ? " used" : "") }, svg), `electrode ${ch}: ${used ? "on your timeline (zaps + listens)" : "listens only"}`);
-    if (used) el("text", { x: x + 32, y: y - 26, class: "elabel" }, svg).textContent = ch;
+      class: "electrode" + (used ? " used" : "") }, svg),
+      `electrode ${ch}: ${used ? "the task stimulates here (zaps + listens)" : lane ? "on your timeline, not used by the task" : "listens only"}`);
+    if (lane) el("text", { x: x + 32, y: y - 26, class: "elabel", style: used ? "" : "fill:var(--ink-3) !important" }, svg).textContent = ch;
   }
   S.neuronNodes = S.neurons.map(([x, y], i) => tip(el("circle", { cx: x, cy: y, r: 10, class: "neuron" }, svg), `neuron ${i}`));
   // scale bar
@@ -588,10 +604,10 @@ function drawRaster(r) {
     el("text", { x: rx(t), y: RS.H - 6, "text-anchor": "middle", class: "axis-label" }, svg).textContent = `${t} ms`;
   }
   el("text", { x: 12, y: (RS.H - RS.B) / 2, class: "axis-label", "text-anchor": "middle",
-    transform: `rotate(-90 12 ${(RS.H - RS.B) / 2})` }, svg).textContent = "neurons (near → far from electrode)";
+    transform: `rotate(-90 12 ${(RS.H - RS.B) / 2})` }, svg).textContent = "neurons (near → far from stimulating electrodes)";
   S.ticks = [];
   if (r) {
-    for (const [t] of r.pulses) el("rect", { x: rx(t), y: RS.T, width: Math.max(rx(1) - rx(0), 3), height: RS.H - RS.B - RS.T, class: "band" }, svg);
+    for (const t of new Set(r.pulses.map(p => p[0]))) el("rect", { x: rx(t), y: RS.T, width: Math.max(rx(1) - rx(0), 3), height: RS.H - RS.B - RS.T, class: "band" }, svg);
     S.ticks = r.spikes.map(([row, , t]) => el("line", { x1: rx(t), x2: rx(t), y1: ry(row) - 2.5, y2: ry(row) + 2.5, class: "spike" }, svg));
   }
   S.rCursor = el("line", { y1: RS.T, y2: RS.H - RS.B, class: "cursor", opacity: r ? 1 : 0 }, svg);
@@ -620,7 +636,8 @@ function drawActivity(r) {
   el("text", { x: rx(0) + 4, y: T + 10, style: "font-size:11px;font-weight:600;fill:var(--stim)" }, svg).textContent = `readout window (0–${S.R} ms)`;
   for (let t = 0; t <= S.D; t += tickStep(S.D))
     el("text", { x: rx(t), y: H - 6, "text-anchor": "middle", class: "axis-label" }, svg).textContent = `${t} ms`;
-  for (const [t, , a] of r.pulses) el("rect", { x: rx(t), y: T, width: Math.max(rx(1) - rx(0), 2), height: H - B - T, fill: ampColor(a), opacity: 0.35 }, svg);
+  const bands = new Map(); for (const [t, , a] of r.pulses) bands.set(t, Math.max(a, bands.get(t) ?? 0));
+  for (const [t, a] of bands) el("rect", { x: rx(t), y: T, width: Math.max(rx(1) - rx(0), 2), height: H - B - T, fill: ampColor(a), opacity: 0.35 }, svg);
   const clip = el("clipPath", { id: "aclip" }, el("defs", {}, svg));
   S.aClip = el("rect", { x: rx(0), y: 0, width: 0, height: H }, clip);
   const pts = bins.map((v, i) => `${rx(i + 0.5)},${ay(v)}`).join(" ");
@@ -639,7 +656,7 @@ function drawActivity(r) {
 function drawHeat(r) {
   const box = $("heat"); S.cells = null;
   if (!r.grid) { box.innerHTML = `<div class="empty">This task's features aren't electrode × time-window counts, so there's no grid to draw.</div>`; return; }
-  const keep = r.grid.map((_, i) => i).filter(i => r.grid[i].some(v => v) || S.rows.includes(S.electrodes[i][0]));
+  const keep = r.grid.map((_, i) => i).filter(i => r.grid[i].some(v => v) || S.used.includes(S.electrodes[i][0]));
   const rows = keep.map(i => r.grid[i]), nb = rows[0].length, max = Math.max(1, ...rows.flat());
   const L = 92, cw = (1000 - L - 10) / nb, ch = 18, H = rows.length * ch + 30;
   box.innerHTML = "";
@@ -648,7 +665,7 @@ function drawHeat(r) {
   rows.forEach((row, i) => {
     const e = S.electrodes[keep[i]][0];
     el("text", { x: L - 8, y: i * ch + ch - 4, "text-anchor": "end", class: "axis-label",
-      style: S.rows.includes(e) ? "fill:var(--stim);font-weight:600" : "" }, svg).textContent = `electrode ${e}`;
+      style: S.used.includes(e) ? "fill:var(--stim);font-weight:600" : "" }, svg).textContent = `electrode ${e}`;
     row.forEach((v, j) => {
       const c = el("rect", { x: L + j * cw, y: i * ch, width: cw, height: ch, rx: 3, class: "cell", fill: "var(--lane)" }, svg);
       c.dataset.fill = v ? `color-mix(in srgb, var(--spike) ${15 + 85 * v / max}%, var(--lane))` : "var(--lane)";
@@ -678,7 +695,7 @@ function drawWeights(r) {
   const counts = r?.grid ?? W.map(row => row.map(() => 0));
   const strong = W.map(row => Math.max(...row.map(Math.abs)));
   const cut = [...strong].sort((a, b) => b - a)[Math.min(9, strong.length - 1)];   // top ~10 electrodes by weight
-  const keep = W.map((_, i) => i).filter(i => counts[i].some(v => v) || strong[i] >= cut || S.rows.includes(S.electrodes[i][0]));
+  const keep = W.map((_, i) => i).filter(i => counts[i].some(v => v) || strong[i] >= cut || S.used.includes(S.electrodes[i][0]));
   const votes = keep.map(i => counts[i].map((c, j) => c * W[i][j]));
   const vmax = Math.max(1e-9, ...votes.flat().map(Math.abs)), cmax = Math.max(1, ...keep.flatMap(i => counts[i]));
   const L = 92, gw = 248, gap = 46, ch = 15, T = 26, H = T + keep.length * ch + 26, cw = gw / nb;
@@ -698,7 +715,7 @@ function drawWeights(r) {
   keep.forEach((i, row) => {
     const e = S.electrodes[i][0], y = T + row * ch;
     el("text", { x: L - 8, y: y + ch - 3, "text-anchor": "end", class: "axis-label",
-      style: S.rows.includes(e) ? "fill:var(--stim);font-weight:600" : "" }, svg).textContent = `electrode ${e}`;
+      style: S.used.includes(e) ? "fill:var(--stim);font-weight:600" : "" }, svg).textContent = `electrode ${e}`;
     for (let j = 0; j < nb; j++) {
       const c = counts[i][j], w = W[i][j], v = votes[row][j], win = `${j * S.binMs}–${(j + 1) * S.binMs} ms`;
       const cc = tip(el("rect", { x: gx(0) + j * cw, y, width: cw, height: ch, class: "cell", fill: "var(--lane)" }, svg), `electrode ${e}, ${win}: ${c} spikes`);
@@ -913,7 +930,8 @@ const sd = xs => Math.sqrt(mean(xs.map(x => (x - mean(xs)) ** 2)));
 
 function drawRepeats() {
   const svg = $("repeats"); svg.innerHTML = "";
-  if (!S.repeats.length) { $("repcap").innerHTML = ""; svg.setAttribute("viewBox", "0 0 1000 0"); return; }
+  svg.style.display = S.repeats.length ? "" : "none";   // no empty plot area before the first run
+  if (!S.repeats.length) { $("repcap").innerHTML = ""; return; }
   const W = 1000, L = 300, R = 20, rowH = 58, T = 10, H = T + S.repeats.length * rowH + 34;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   const all = S.repeats.flatMap(r => r.scores);
@@ -952,6 +970,46 @@ function drawRepeats() {
       : "The rows clearly separate: <b>the change mattered</b> to how the neurons responded.");
   }
   $("repcap").innerHTML = cap;
+}
+
+// ============================================================ 9. training results
+function drawTraining() {
+  const t = S.training, pctOf = v => `${Math.round(v * 100)}%`;
+  const per = Math.round(t.trials / S.presets.length);
+  const variation = t.jitter_ms || t.amplitude_range
+    ? [t.jitter_ms ? `±${t.jitter_ms} ms` : null, t.amplitude_range ? `${t.amplitude_range[0]}–${t.amplitude_range[1]} µA` : null].filter(Boolean).join(" · ")
+    : "none";
+  const tiles = [
+    [t.trials.toLocaleString(), `training trials (${per} per input)`],
+    [variation, "pulse variation during training"],
+    [t.electrodes.length ? t.electrodes.join(" + ") : "–", t.electrodes.length > 1 ? "electrodes fired together per pulse" : "stimulating electrode"],
+    [pctOf(t.train_accuracy), "accuracy on its own training trials"],
+    [pctOf(S.heldoutAccuracy), "held-out accuracy (new trials)"],
+    [pctOf(S.bestLine), "best line on the raw inputs"],
+  ];
+  $("traintiles").innerHTML = tiles.map(([v, l]) => `<div><b>${v}</b>${l}</div>`).join("");
+  // one bar per input: held-out accuracy, colored by that input's right answer
+  const svg = $("trainbars"); svg.innerHTML = "";
+  const W = 1000, L = 120, R = 60, rowH = 34, H = S.heldout.length * rowH + 26;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const px = v => L + v * (W - L - R);
+  for (const v of [0, 0.5, 1]) {
+    el("line", { x1: px(v), x2: px(v), y1: 0, y2: H - 22, class: v === 0.5 ? "thresh" : "tick" }, svg);
+    el("text", { x: px(v), y: H - 6, "text-anchor": "middle", class: "axis-label" }, svg).textContent = v === 0.5 ? "50% (coin flip)" : pctOf(v);
+  }
+  S.heldout.forEach((h, i) => {
+    const y = i * rowH + 6;
+    el("text", { x: L - 10, y: y + 17, "text-anchor": "end", class: "axis-label", style: "font-size:13px" }, svg)
+      .textContent = `(${h.input.join(", ")}) → ${h.answer}`;
+    tip(el("rect", { x: px(0), y, width: px(h.accuracy) - px(0), height: rowH - 12, rx: 4,
+      fill: h.answer ? "var(--up)" : "var(--down)" }, svg), `${h.trials} training trials, ${pctOf(h.accuracy)} right when held out`);
+    el("text", { x: px(h.accuracy) + 8, y: y + 17, class: "axis-label", style: "font-size:13px;font-weight:600;fill:var(--ink)" }, svg)
+      .textContent = pctOf(h.accuracy);
+  });
+  const gap = t.train_accuracy - S.heldoutAccuracy;
+  $("traincap").innerHTML = `Bars are colored by each input's right answer (teal = 1, red = 0). ` +
+    (gap > 0.15 ? `Training accuracy is ${Math.round(gap * 100)} points above held-out: the readout is still memorizing some noise; more training trials would help.`
+      : `Training and held-out accuracy are close (${Math.round(gap * 100)} points apart), so the readout isn't just memorizing its training trials.`);
 }
 
 // ============================================================ the clock: draw everything at time t
@@ -1064,7 +1122,7 @@ function loop(now) {
 // ============================================================ boot
 (async function boot() {
   const s = await (await fetch("/api/setup")).json();
-  Object.assign(S, { weights: s.weights, binMs: s.bin_ms, bestLine: s.best_line, inputNames: s.page.input_names ?? ["input 1", "input 2"], R: s.trial_ms, D: s.trial_ms, repeats: [], brushDefault: s.amplitude, sel: -1, brush: s.amplitude, rows: s.rows, presets: s.presets, neurons: s.neurons, electrodes: s.electrodes,
+  Object.assign(S, { used: s.used, training: s.training, heldout: s.heldout, heldoutAccuracy: s.heldout_accuracy, weights: s.weights, binMs: s.bin_ms, bestLine: s.best_line, inputNames: s.page.input_names ?? ["input 1", "input 2"], R: s.trial_ms, D: s.trial_ms, repeats: [], brushDefault: s.amplitude, sel: -1, brush: s.amplitude, rows: s.rows, presets: s.presets, neurons: s.neurons, electrodes: s.electrodes,
     trainedAmp: s.amplitude, nFeatures: s.n_features, raw: s.raw, rawCoef: s.raw_coef, rawStart: s.raw_start, cloud: s.cloud });
   $("taskname").textContent = `· ${s.task}`;
   document.title = `Neural Playground · ${s.task}`;
@@ -1104,7 +1162,7 @@ function loop(now) {
   }
   $("amp").oninput = e => setStrength(+e.target.value);
   $("delpulse").onclick = () => { S.pulses.splice(S.sel, 1); S.sel = -1; changed(); };
-  $("trainedtick").textContent = `▲ ${s.amplitude} trained`;
+  $("trainedtick").textContent = `▲ ${s.amplitude} nominal`;
   $("trainedtick").style.left = `${(s.amplitude - AMP_MIN) / (AMP_MAX - AMP_MIN) * 100}%`;
   $("amp").style.background = ampGradient();
   document.addEventListener("keydown", e => {   // Delete / arrows edit the selected pulse
@@ -1121,7 +1179,7 @@ function loop(now) {
   $("restart").onclick = () => { play(false); render(0); };
   $("scrub").oninput = e => { play(false); render(+e.target.value); };
   changed();
-  drawMap(); drawRaster(null); drawActivity(null); drawRawPlot(); drawCloud(null); drawWeights(null);
+  drawMap(); drawRaster(null); drawActivity(null); drawRawPlot(); drawCloud(null); drawWeights(null); drawTraining(); drawRepeats();
   requestAnimationFrame(loop);
   const q = new URLSearchParams(location.search);   // ?auto=(1, 1)&fast for screenshots
   S.fast = q.has("fast");

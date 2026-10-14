@@ -31,8 +31,14 @@ TRIAL_MS = 60  # how long each trial is simulated
 # (With a 30 ms gap the network forgets bit 1 and accuracy drops to ~60%.)
 BIT_TIMES_MS = (20.0, 26.0)
 AMPLITUDE_UA = 40.0  # pulse strength for a "1" (a "0" is no pulse)
+# Each bit fires TWO neighbouring electrodes together: more neurons respond and more
+# electrodes hear it, so the "tired second burst" in (1, 1) stands out from the noise.
+# Training with a little variation (timing and strength) keeps the readout from
+# memorizing one exact pattern, so small changes to the input don't break it.
+JITTER_MS = 1.5  # each training pulse lands up to this far from its nominal time
+AMPLITUDE_RANGE_UA = (30.0, 50.0)  # each training pulse's strength is drawn from this range
 BIN_MS = 5  # decoding: count spikes in 5 ms time bins
-TRIALS_PER_INPUT = 25  # repeats of each XOR input (noise makes every trial differ)
+TRIALS_PER_INPUT = 250  # repeats of each XOR input; plain linear regression needs many to not overfit
 
 # livn downloads the network's wiring into ./systems/ (gitignored)
 DATA_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the repo folder
@@ -53,32 +59,39 @@ def make_dataset():
 
 # ======================================================== 4. ENCODING
 class TemporalBitsEncoding(Encoding):
-    """Turns two bits into electrical pulses on one electrode, one after the other.
+    """Turns two bits into electrical pulses, one bit after the other.
 
     This is our "input device": in a real lab it would be the stimulator
     attached to the multi-electrode array (MEA).
     """
 
-    channel: int  # which electrode we stimulate through
+    channels: list[int]  # the electrodes each bit fires together (two neighbours)
     amplitude_ua: float = AMPLITUDE_UA
+    vary: bool = False  # training: jitter each pulse's timing and strength a little
     dt: float = 0.1  # time resolution of the stimulus, in ms
 
     def pulses(self, inputs):
-        """The input as a list of (time in ms, electrode) pulses.
+        """The input as a list of (time in ms, electrode) pulses, at their nominal values.
 
-        This is the whole encoding idea: (1, 1) is just "pulse at 20 ms and
-        26 ms on electrode 3", (1, 0) is "pulse at 20 ms", (0, 0) is nothing.
+        This is the whole encoding idea: (1, 1) is just "pulse at 20 ms and 26 ms,
+        each on both electrodes", (1, 0) is "pulse at 20 ms", (0, 0) is nothing.
         """
-        return [(t, self.channel) for bit, t in zip(inputs, BIT_TIMES_MS) if bit == 1]
+        return [(t, ch) for bit, t in zip(inputs, BIT_TIMES_MS) if bit == 1 for ch in self.channels]
 
     def __call__(self, env, t_end, inputs):
         # One row per time step, one column per electrode, values in microamps.
         n_steps = int(t_end / self.dt)
         electrodes = np.zeros((n_steps, env.io.num_channels), dtype=np.float32)
 
-        for t, ch in self.pulses(inputs):  # each pulse lasts 1 ms
-            start = int(t / self.dt)
-            electrodes[start:start + int(1.0 / self.dt), ch] = self.amplitude_ua
+        for bit, t in zip(inputs, BIT_TIMES_MS):
+            if bit != 1:
+                continue
+            amplitude = self.amplitude_ua
+            if self.vary:  # a slightly different pulse every trial, so the readout can't memorize one exact pattern
+                t += np.random.uniform(-JITTER_MS, JITTER_MS)
+                amplitude = np.random.uniform(*AMPLITUDE_RANGE_UA)
+            start = int(t / self.dt)  # each pulse lasts 1 ms, on all of this bit's electrodes at once
+            electrodes[start:start + int(1.0 / self.dt), self.channels] = amplitude
 
         # The MEA model works out how much each neuron feels from each electrode
         # (closer neurons feel more) and gives back a per-neuron stimulus.
@@ -132,9 +145,22 @@ def strongest_electrodes(env, n=1):
     return [int(ch) for ch in np.argsort(reach)[::-1][:n]]
 
 
+def neighbour_electrode(env, ch):
+    """The closest electrode to `ch` among the few that reach our patch best.
+
+    Several grid neighbours are equally close (200 um), so we prefer ones that
+    sit over the neurons rather than at the edge of the patch.
+    """
+    xy = np.asarray(env.io.electrode_coordinates)[:, 1:3]
+    candidates = [e for e in strongest_electrodes(env, n=4) if e != ch]
+    return min(candidates, key=lambda e: np.linalg.norm(xy[e] - xy[ch]))
+
+
 def make_pipeline(env):
     """The Encoding + Decoding this task uses (playground.py uses it too)."""
-    return TemporalBitsEncoding(channel=strongest_electrodes(env)[0]), BinnedChannelCounts()
+    main = strongest_electrodes(env)[0]
+    encoding = TemporalBitsEncoding(channels=[main, neighbour_electrode(env, main)], vary=True)
+    return encoding, BinnedChannelCounts()
 
 
 # ======================================================== 7. COLLECT NEURAL FEATURES
@@ -177,7 +203,7 @@ def plot_rasters(examples, encoding):
     for ax, bits in zip(axes, INPUTS):
         out = examples[bits]
         ax.set_facecolor("#fcfcfb")
-        for onset, _ in encoding.pulses(bits):  # shade where a pulse was delivered
+        for onset in sorted({t for t, _ in encoding.pulses(bits)}):  # shade where a pulse was delivered
             ax.axvspan(onset, onset + 1, color="#6250d6", alpha=0.3, lw=0)
             ax.text(onset + 0.5, 1.01, "pulse", transform=ax.get_xaxis_transform(),
                     ha="center", va="bottom", fontsize=8, color="#52514e")
@@ -221,9 +247,11 @@ PLAYGROUND = {
     "tagline": "Linear regression alone <b>can't</b> solve XOR. Put a fixed, untrained network of neurons in front of it, "
                "and it <b>can</b>.",
     "input_names": ["bit 1", "bit 2"],
-    "encoding": "The neurons never see bits, only zaps. For XOR: bit 1 → zap at 20 ms, bit 2 → zap at 26 ms, 0 → nothing.",
-    "howto": "<b>XOR by hand:</b> Clear, then pulse electrode 3 at 20 ms = (1, 0). Add 26 ms = (1, 1). "
-             "Move it to 45 ms = a pattern it never trained on.",
+    "encoding": "The neurons never see bits, only zaps. For XOR, each bit fires two neighbouring electrodes (3 and 51) "
+                "together: bit 1 → both at 20 ms, bit 2 → both at 26 ms, 0 → nothing. The readout was trained on slightly "
+                "varied versions (±1.5 ms, 30–50 µA), so small changes shouldn't throw it off.",
+    "howto": "<b>XOR by hand:</b> Clear, then pulse electrodes 3 and 51 at 20 ms = (1, 0). Add a pulse on both at 26 ms = (1, 1). "
+             "Move bit 2 to 45 ms = a pattern it never trained on.",
     "raster": "Each pulse triggers a burst that dies out within ~10 ms, back to a low <b>background</b> level (never zero: "
               "there's always some noise). Bit 2 arriving during bit 1's recovery gets a smaller burst; that's what makes XOR solvable.",
     "windows": "Bit 1's burst lands in the <b>20–25 ms</b> window, so weights there learned to push toward 1 (bit 1 alone → "
@@ -234,6 +262,13 @@ PLAYGROUND = {
     "baseline": "Linear regression is <i>w₁·bit1 + w₂·bit2 + start</i>. XOR needs bit 1 to push the answer up when bit 2 is off "
                 "and down when it's on; one weight can't do both. A least-squares fit gives up entirely and says 0.5 for "
                 "everything; a hand-placed line can reach 75%.",
+    "training": "Trained once on 1,000 trials (250 per input). Each bit fires electrodes 3 and 51 together, and every training "
+                "pulse was nudged by up to ±1.5 ms and drawn from 30–50 µA, so the readout learns what matters instead of "
+                "memorizing one exact pattern. <b>Held-out</b> accuracy scores each training trial with a readout trained "
+                "<i>without</i> it.<br><br><b>Tested separately on fresh trials</b> (192 per condition): <b>86%</b> on the normal "
+                "inputs, <b>90%</b> with pulses shifted 0.5 ms or weakened to 35 µA, and <b>82%</b> across the full training range. "
+                "The earlier version (one electrode, trained only on exact timing) scored 75%, 68% and 65% on the same tests; "
+                "it's kept in git under the tag <code>xor-fixed-timing</code>.",
     "ideas": [
         "<b>Compare (0, 1) with (1, 1).</b> Watch bit 2's burst in the activity chart and raster: it's smaller in (1, 1). "
         "Neurons that fired for bit 1 are still recovering when bit 2 arrives. That difference is the whole reason XOR is solvable.",
@@ -241,12 +276,16 @@ PLAYGROUND = {
         "back to full size and the answer drifts toward \"1\". The network has recovered, so the two pulses no longer interact.",
         "<b>Push bit 2 very close to bit 1</b> (about 22 ms). The two pulses blur into one burst, so the network can't tell "
         "\"two pulses\" from \"one strong pulse\".",
-        "<b>Weaken a pulse</b> to 15–20 µA. Little or no burst: it's below what the neurons need to fire. A (1, 1) with a weak "
-        "bit 2 tends to get read as (1, 0).",
-        "<b>Strengthen a pulse</b> past 100 µA. A bigger burst that reaches more electrodes. The readout was only trained at "
-        "40 µA, so its answers on patterns like this are much less reliable.",
+        "<b>Nudge a pulse</b> by a millisecond or change its strength by a few µA, then <i>Run ×10</i>. The readout was "
+        "trained on varied pulses (±1.5 ms, 30–50 µA), so answers should mostly hold up inside that range.",
+        "<b>Weaken bit 2</b> on both electrodes to 15–20 µA. Little or no burst: too weak to make neurons fire. A (1, 1) with "
+        "a weak bit 2 tends to get read as (1, 0).",
+        "<b>Strengthen a pulse</b> past 100 µA. A bigger burst that reaches more electrodes, far outside the 30–50 µA the readout "
+        "trained on, so its answers on patterns like this are much less reliable.",
+        "<b>Drop one of the two electrodes</b> (delete the electrode 51 pulses from a task input). Fewer neurons respond and the "
+        "response pattern changes, so the readout gets less reliable, especially on (1, 1).",
         "<b>Move a pulse to another electrode</b> (e.g. 77). Different neurons respond first. The weights were tuned to "
-        "electrode 3's response pattern, so the answer becomes close to arbitrary.",
+        "electrodes 3 and 51, so the answer becomes close to arbitrary.",
         "<b>Shift the whole pair later</b> (bits at 40 and 46 ms). Same pattern, different time. The readout learned specific "
         "time windows, not \"two pulses 6 ms apart\", so it doesn't recognize it.",
         "<b>Send nothing</b> (Clear, then Send). Only background noise: a few random spikes, no bursts, and a score near 0.",
