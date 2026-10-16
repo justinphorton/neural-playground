@@ -39,7 +39,9 @@ def main():
     for path in sorted(glob.glob(os.path.join(RESULTS, "*", "results.json"))):
         with open(path) as f:
             res = json.load(f)
-        data = np.load(os.path.join(os.path.dirname(path), "data.npz"))
+        if "config" not in res:
+            continue  # another task's results (e.g. rps), not a blackjack run
+        data =np.load(os.path.join(os.path.dirname(path), "data.npz"))
         runs.append((os.path.basename(os.path.dirname(path)), res, data))
     if not runs:
         print("no finished runs in results/ yet")
