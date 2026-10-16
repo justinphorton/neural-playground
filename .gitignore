@@ -21,3 +21,6 @@ systems/
 .idea/
 .DS_Store
 Thumbs.db
+.vibe-wise
+experiments/
+tasks/piano_notes_task/training_data/*
