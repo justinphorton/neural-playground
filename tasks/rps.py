@@ -1,19 +1,17 @@
-"""YOUR EXPERIMENT: copy this file (e.g. to my_parity.py), then work top to bottom.
+"""Rock-paper-scissors: did player 1 win? Each move fires its own electrode pair, player 2 6 ms after player 1.
 
-This file has the exact same sections, in the same order, as demo_xor.py.
-Stuck on a section? Open demo_xor.py and look at the same section there.
+Built from template_task.py: same sections, in the same order, as demo_xor.py.
+Run it with `python tasks/rps.py`, or in the playground with `python playground/web.py rps`.
 
-=============================================================== PLAN FIRST
-Fill this out BEFORE writing any code. If you can't fill in a line, you're
-not ready to code yet. Talk it through with the team.
-
-TASK:        rock-paper-scissors: did player 1 win? (ties excluded)
+=============================================================== PLAN
+TASK:       rock-paper-scissors: did player 1 win? (ties excluded)
 INPUT:       a tuple of 2 moves, each 0 = rock, 1 = paper, 2 = scissors.
 ENCODING:    each move has its own pair of electrodes; player 1's move fires at
              20 ms, player 2's at 26 ms (XOR's timing). 1 ms, 40 uA pulses.
 DECODING:    spike counts per electrode per 5 ms bin (same as XOR).
 HYPOTHESIS:  the winner rule is cyclic (rock > scissors > paper > rock), so no
-             straight line on the moves can get it - not even on one-hot moves.
+             straight line on the moves gets all 6 matchups: least squares says
+             0.5 for every one, a hand-placed line gets 67% (83% on one-hot moves).
              The reservoir can only beat the baseline if the second move's
              response depends on which move came 6 ms before it.
 METRIC:      test accuracy, reservoir vs. baseline, plus accuracy per move pair.
@@ -78,6 +76,11 @@ INPUTS = [(a, b) for a in range(3) for b in range(3) if a != b]  # ties excluded
 def target(x):
     """1 if player 1's move beats player 2's: paper>rock, scissors>paper, rock>scissors."""
     return int((x[0] - x[1]) % 3 == 1)
+
+
+def input_label(x):
+    """How the playground names an input, e.g. "paper v rock" for (1, 0)."""
+    return f"{MOVE_NAMES[x[0]]} v {MOVE_NAMES[x[1]]}"
 
 
 # ===========================================================================
@@ -323,7 +326,42 @@ def main():
 #        with an `amplitude_ua` setting, up to 4 electrodes on its timeline, and
 #        electrode x time-window features. See "Playground scope" in the README.
 # ===========================================================================
-PLAYGROUND = {}
+PLAYGROUND = {
+    "tagline": "Rock-paper-scissors' winner rule is a cycle, so a least-squares line on the moves gives up and says 0.5. "
+               "Put a fixed, untrained network of neurons in front of the <b>same</b> line, and it gets about 3 in 4 right.",
+    "input_names": ["player 1 (0 rock · 1 paper · 2 scissors)", "player 2"],
+    "encoding": "Each move fires its own pair of neighbouring electrodes: <b>rock</b> = 3 and 77, <b>paper</b> = 51 and 125, "
+                "<b>scissors</b> = 50 and 2. Player 1's move fires at 20 ms, player 2's at 26 ms, the same 6 ms gap as XOR. "
+                "Ties are left out of the task. The readout was trained on slightly varied versions (±1.5 ms, 30–50 µA).",
+    "howto": "<b>Paper v rock by hand:</b> Clear, then pulse electrodes 51 and 125 at 20 ms (paper), and 3 and 77 at 26 ms "
+             "(rock). Then swap player 1 to scissors (50 and 2 at 20 ms) and compare the second burst.",
+    "raster": "Each move triggers a burst near its electrodes that dies out within ~10 ms. Player 2's move arrives while "
+              "neurons are still recovering from player 1's, so the same move gets a different-sized burst depending on "
+              "what came first. In our recorded trials, rock's electrodes picked up about <b>8</b> spikes in 25–35 ms after "
+              "paper, but about <b>11</b> after scissors.",
+    "windows": "Almost all of the answer is in the <b>25–35 ms</b> windows, right after player 2's move. In our tests, a readout "
+               "given only those windows got about 75%; given only the windows before player 2, or only after 35 ms, it was "
+               "at chance. Player 1's move alone can't help: every move beats one move and loses to another.",
+    "baseline": "Linear regression on the moves is <i>w₁·move1 + w₂·move2 + start</i>. The winner rule is a cycle "
+                "(rock > scissors > paper > rock), so no line gets all six matchups. A least-squares fit gives up and says "
+                "0.5 for every matchup; a hand-placed line can reach 67%, or 83% (5 of 6 matchups) if each move is given as "
+                "rock/paper/scissors flags instead of a number.",
+    "training": "Trained once on 900 trials (150 per matchup), every pulse nudged by up to ±1.5 ms and drawn from 30–50 µA. "
+                "<b>Held-out</b> accuracy scores each training trial with a readout trained <i>without</i> it.<br><br>"
+                "<b>Tested separately</b> on a 70/30 split: <b>75%</b> with this plain linear regression and <b>77%</b> with "
+                "ridge regression (still a straight line, with a penalty on huge weights). Every matchup scored 74–81% with "
+                "ridge, so no single easy matchup carries the average.",
+    "ideas": [
+        "<b>Compare rock after paper with rock after scissors.</b> Watch player 2's burst in the activity chart: it's smaller "
+        "after paper. That difference is what the readout uses to tell a win from a loss.",
+        "<b>Slide player 2 later</b> (26 → 30 → 40 ms), with <i>Run ×10</i> at each step. The network recovers before player 2 "
+        "arrives, the two moves stop interacting, and the answers should drift toward guessing.",
+        "<b>Play a tie</b>: the same move for both players. The readout never saw one in training. What does it say, and "
+        "how much does it change between runs?",
+        "<b>Fire only player 1's move.</b> One move alone can't decide a winner, so watch where the score lands.",
+        "<b>Drop one electrode of a pair.</b> Fewer neurons respond, and the readout gets less reliable.",
+    ],
+}
 
 
 if __name__ == "__main__":
