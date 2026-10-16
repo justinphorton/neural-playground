@@ -57,6 +57,7 @@ ENCODING = "amplitude"
 N_ELECTRODES = 1  # electrodes per pulse for "amplitude" and "count" ("space" picks its own)
 START_MS = 20.0  # when the first card slot fires
 SLOT_MS = {"amplitude": 6.0, "count": 12.0, "space": 6.0}  # spacing between card slots
+ORDER = "sequential"  # "sequential": p1..p5 then d1..d5; "interleaved": p1 d1 p2 d2 ...
 PULSE_GAP_MS = 2.0  # "count" only: gap between pulses inside one card's slot
 AMP_RANGE_UA = (20.0, 80.0)  # "amplitude" only: strength for a 2 ... strength for an ace
 TAIL_MS = 30.0  # quiet time after the last pulse, so the decay gets recorded
@@ -187,6 +188,8 @@ class MyEncoding(Encoding):
         for slot, card in enumerate(inputs):
             if card == EMPTY:
                 continue
+            if ORDER == "interleaved":  # player card k fires right before dealer card k
+                slot = 2 * (slot % MAX_CARDS) + slot // MAX_CARDS
             t = START_MS + slot * SLOT_MS[self.mode]
             if self.mode == "amplitude":
                 lo, hi = AMP_RANGE_UA
@@ -363,16 +366,22 @@ def evaluate(X, y, train_idx, test_idx, groups, name):
 #        re-analyse later without re-simulating.
 # ===========================================================================
 def main():
-    global START_MS, NUM_TRIALS
+    global START_MS, NUM_TRIALS, ORDER, N_CELLS
     parser = argparse.ArgumentParser()
     parser.add_argument("--encoding", choices=["amplitude", "count", "space"], default=ENCODING)
     parser.add_argument("--electrodes", type=int, default=N_ELECTRODES)
     parser.add_argument("--start-ms", type=float, default=START_MS)
+    parser.add_argument("--slot-ms", type=float, default=None, help="override SLOT_MS for this encoding")
+    parser.add_argument("--order", choices=["sequential", "interleaved"], default=ORDER)
+    parser.add_argument("--cells", type=int, default=N_CELLS)
     parser.add_argument("--trials", type=int, default=NUM_TRIALS)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--name", default=None)
     args = parser.parse_args()
-    START_MS, NUM_TRIALS = args.start_ms, args.trials
+    START_MS, NUM_TRIALS, ORDER, N_CELLS = args.start_ms, args.trials, args.order, args.cells
+    if args.slot_ms is not None:
+        SLOT_MS[args.encoding] = args.slot_ms
+    args.slot_ms = SLOT_MS[args.encoding]
     name = args.name or f"{args.encoding}_{args.electrodes}e_start{int(args.start_ms)}"
     out_dir = os.path.join(DATA_DIR, "results", name)
     os.makedirs(out_dir, exist_ok=True)

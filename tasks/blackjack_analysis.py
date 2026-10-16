@@ -8,7 +8,7 @@ No simulation: everything is computed from the spike features each run saved.
 2. CARDS      can a straight line recover each card's value from the spikes?
               If not, the encoding loses information and no readout can fix it.
 3. MEMORY     can the player's FIRST card still be recovered from spikes recorded
-              only after the dealer's cards start? If not, the network forgets.
+              only from 30 ms after it fired? If not, the network forgets.
 4. TOTAL      can a straight line recover the player's true hand total (aces
               resolved, a nonlinear function of the cards)?
 """
@@ -23,9 +23,10 @@ from sklearn.linear_model import Ridge
 from sklearn.model_selection import cross_val_score
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from blackjack import BIN_MS, MAX_CARDS, SLOT_MS, hand_value  # noqa: E402
+from blackjack import BIN_MS, MAX_CARDS, hand_value  # noqa: E402
 
-RESULTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results")
+MEMORY_DELAY_MS = 30  # how long after the first card the "memory" check starts looking
+RESULTS =os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results")
 
 
 def r2(X, target):
@@ -64,8 +65,8 @@ def main():
         per_bin = X.reshape(len(X), 128, n_bins)
 
         card_r2 = [r2(X, hands[:, k]) for k in range(2 * MAX_CARDS)]
-        # "late" = bins starting once the dealer's first card has fired
-        late_from = int((cfg["start_ms"] + MAX_CARDS * SLOT_MS[cfg["encoding"]]) // BIN_MS)
+        # "late" = bins starting MEMORY_DELAY_MS after the player's first card fired
+        late_from = int((cfg["start_ms"] + MEMORY_DELAY_MS) // BIN_MS)
         late = per_bin[:, :, late_from:].reshape(len(X), -1)
         first_card_late = r2(late, hands[:, 0])
         totals = np.array([hand_value(h[:MAX_CARDS]) for h in hands])
