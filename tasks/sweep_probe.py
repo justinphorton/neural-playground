@@ -22,8 +22,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 RESULTS_DIR = os.path.join(os.path.dirname(HERE), "results")
 
-PROBE_DELAYS_MS = [2, 4, 6, 8, 10, 15, 20, 30]
-WINDOW_DELAYS_MS = [0, 5, 10, 15, 20, 25, 30, 40]
+PROBE_DELAYS_MS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25, 30]
+WINDOW_DELAYS_MS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20, 30, 40]
 
 
 def run_probe_delay(args):
