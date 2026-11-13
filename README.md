@@ -29,6 +29,7 @@ This opens the playground at http://localhost:8765. Pick an input, press **Send 
 | Command | What it does |
 |---|---|
 | `python tasks/demo_xor.py` | Runs the XOR experiment: trains, tests, compares against the baseline, shows spike rasters (1,000 trials one at a time, ~25 min) |
+| `python tasks/pong_task.py` | Reservoir Pong: predicts where a bouncing ball lands; see [docs/pong_results.md](docs/pong_results.md) for results |
 | `python playground/web.py <task>` | Opens the playground for any task in `tasks/` |
 | `python playground/web.py <task> --retrain` | Retrains that task's saved readout |
 
@@ -132,6 +133,7 @@ neural-playground/
 ├── requirements.txt
 ├── tasks/
 │   ├── demo_xor.py              XOR experiment (reference)
+│   ├── pong_*.py                Reservoir Pong (game, task, landing, screen)
 │   └── template_task.py         starting point for new experiments
 ├── playground/
 │   ├── web.py                   server: livn simulation + readout

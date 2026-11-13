@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reservoir Pong: replay</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --line: #e4e7ec; --lane: #f1f3f6;
+    --ink: #111827; --ink-2: #4b5563; --ink-3: #9ca3af;
+    --stim: #2563eb; --stim-soft: rgba(37, 99, 235, .14);
+    --good: #0d9488; --bad: #dc2626;
+    --m-follow: #9ca3af; --m-onehot: #d97706; --m-res: #0d9488; --m-rand: #7c3aed; --m-best: #111827;
+    --shadow: 0 1px 2px rgba(17, 24, 39, .05), 0 4px 14px rgba(17, 24, 39, .04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a20; --line: #2a2f38; --lane: #20242b;
+      --ink: #f3f4f6; --ink-2: #c5cad3; --ink-3: #8b919c;
+      --stim: #5b8def; --stim-soft: rgba(91, 141, 239, .2);
+      --good: #22a596; --bad: #e5534b;
+      --m-follow: #8b919c; --m-onehot: #f59e0b; --m-res: #22a596; --m-rand: #a78bfa; --m-best: #f3f4f6;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 20px 48px; }
+  h1, h2 { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+  h1 { margin: 0; font-size: 30px; letter-spacing: -.01em; }
+  h2 { margin: 0 0 8px; font-size: 17px; }
+  .tagline { margin: 6px 0 18px; color: var(--ink-2); font-size: 16px; }
+  .toy { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad);
+         border-radius: 10px; padding: 8px 12px; margin-bottom: 16px; font-size: 14px; display: none; }
+  .grid { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 18px 20px; box-shadow: var(--shadow); min-width: 0; }
+  canvas { width: 100%; display: block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  button { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--lane); color: var(--ink); }
+  button.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  label { font-size: 14px; color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; }
+  .models { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 12px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink-2); font-weight: 600; font-size: 12.5px; }
+  .ok { color: var(--good); font-weight: 600; } .no { color: var(--bad); font-weight: 600; }
+  .bars td.bar { width: 22%; }
+  .bars td:first-child { white-space: nowrap; }
+  .bar span { display: block; height: 10px; border-radius: 5px; }
+  .tally { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+  .pill { font-family: Inter, system-ui, sans-serif; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+          background: var(--lane); border: 1px solid var(--line); color: var(--ink-2); }
+  .pill.bounce { background: var(--stim-soft); color: var(--stim); border-color: transparent; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Reservoir Pong <span style="font-weight:500;color:var(--ink-2)">replay</span></h1>
+  <p class="tagline">The neurons see only the first rows of each fall, one pulse per row. Then the paddle has to
+    commit. Balls that hit a wall <b>after</b> that point are the ones a straight line gets wrong.</p>
+  <div class="toy" id="toy"><b>Toy data.</b> These trials come from a stand-in reservoir used to test the page,
+    not from livn. Run <code>pong_task.py</code> then <code>pong_landing.py</code> for real numbers.</div>
+
+  <div class="grid">
+    <div class="card">
+      <canvas id="court"></canvas>
+      <div class="controls">
+        <button id="prev">◀</button>
+        <button id="play" class="primary">Play</button>
+        <button id="next">▶</button>
+        <label>speed <input id="speed" type="range" min="0.5" max="8" step="0.5" value="2.5"></label>
+        <label><input id="onlyBounce" type="checkbox"> only bounce after commit</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="ballTitle">Ball</h2>
+      <p class="sub" id="ballDesc"></p>
+      <div class="models" id="models"></div>
+      <table id="predTable"></table>
+      <div class="tally" id="tally"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Catch rate over the whole test set</h2>
+    <p class="sub" id="summarySub"></p>
+    <table class="bars" id="summary"></table>
+  </div>
+</main>
+
+<script>
+const DATA = __PONG_DATA__;
+const M = DATA.meta;
+const MODELS = [
+  ["follow the ball", "--m-follow", false],
+  ["linear, one-hot", "--m-onehot", true],
+  ["RESERVOIR", "--m-res", true],
+  ["random features", "--m-rand", false],
+  ["best possible", "--m-best", true],
+].filter(([n]) => n in DATA.summary);
+const shown = Object.fromEntries(MODELS.map(([n, , on]) => [n, on]));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const pct = x => Math.round(100 * x) + "%";
+
+let order = DATA.balls.map((_, i) => i), pos = 0, t = -1, playing = false, last = null;
+const tally = {}, counted = new Set();
+
+// ---------- geometry
+const fold = x => { const m = ((x % (2 * M.cols)) + 2 * M.cols) % (2 * M.cols); return m <= M.cols ? m : 2 * M.cols - m; };
+const canvas = document.getElementById("court"), ctx = canvas.getContext("2d");
+let G = {};
+function layout() {
+  const w = canvas.clientWidth, dpr = window.devicePixelRatio || 1;
+  const lanes = MODELS.filter(([n]) => shown[n]).length;
+  const rowH = Math.min(46, (w * 1.15) / (M.landing_row + 1)), top = rowH / 2 + 22, laneH = 14;
+  const h = top + rowH * (M.landing_row + 0.5) + 14 + lanes * laneH + 10;
+  canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.height = h + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const left = 14, right = w - 14;
+  G = { w, h, top, rowH, laneH, left, right, cell: (right - left) / M.cols,
+        X: x => left + x * (right - left) / M.cols, Y: r => top + r * rowH, floor: top + M.landing_row * rowH };
+}
+
+// ---------- drawing
+function draw() {
+  const b = DATA.balls[order[pos]];
+  const { w, h, X, Y, rowH, cell, left, right, floor } = G;
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = "12px Inter, system-ui, sans-serif";
+
+  // seen rows, grid, commit line
+  ctx.fillStyle = css("--lane");
+  ctx.fillRect(left, Y(-0.5), right - left, rowH * M.rows);
+  ctx.strokeStyle = css("--line"); ctx.lineWidth = 1;
+  for (let c = 0; c <= M.cols; c++) { ctx.beginPath(); ctx.moveTo(X(c), Y(-0.5)); ctx.lineTo(X(c), floor); ctx.stroke(); }
+  ctx.fillStyle = css("--ink-3");
+  ctx.fillText("seen by the neurons", left + 4, Y(-0.5) - 6);
+  const commitY = Y(M.rows - 0.5);
+  ctx.setLineDash([5, 4]); ctx.strokeStyle = css("--ink-2");
+  ctx.beginPath(); ctx.moveTo(left, commitY); ctx.lineTo(right, commitY); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = css("--ink-2");
+  ctx.fillText("commit point", right - 84, commitY + 14);
+  ctx.strokeStyle = css("--ink"); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(left, floor); ctx.lineTo(right, floor); ctx.stroke();
+
+  // pulses: the observed cell lights up when the ball passes its row
+  for (let r = 0; r < M.rows; r++) {
+    if (t < r) continue;
+    const age = t - r, c = b.cols[r];
+    ctx.fillStyle = css("--stim-soft");
+    ctx.fillRect(X(c) + 1, Y(r - 0.5) + 1, cell - 2, rowH - 2);
+    if (age < 0.8) { ctx.strokeStyle = css("--stim"); ctx.lineWidth = 2; ctx.strokeRect(X(c) + 1, Y(r - 0.5) + 1, cell - 2, rowH - 2); }
+    ctx.fillStyle = css("--stim");
+    const label = (M.channels ? `e${M.channels[c]} · ` : "") + `${M.row_times_ms[r]} ms`;
+    const tw = ctx.measureText(label).width;
+    ctx.fillText(label, Math.min(X(c) + 4, right - tw - 4), Y(r - 0.5) + 14);
+  }
+
+  // ball trail + ball
+  const tb = Math.max(0, Math.min(t, M.landing_row));
+  ctx.strokeStyle = css("--ink-3"); ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let s = 0; s <= tb + 1e-9; s += 0.05) { const px = X(fold(b.x0 + b.vx * s)), py = Y(s); s ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+  ctx.stroke();
+  if (t >= 0) {
+    ctx.fillStyle = css("--ink"); ctx.beginPath();
+    ctx.arc(X(fold(b.x0 + b.vx * tb)), Y(tb), 7, 0, 7); ctx.fill();
+  }
+
+  // paddles (one lane each) + current guess ticks on the floor
+  let lane = 0;
+  for (const [n, v] of MODELS) {
+    if (!shown[n]) continue;
+    const col = css(v), path = b.path[n];
+    const s = Math.max(0, Math.min(t, M.landing_row)), i = Math.floor(s), f = s - i;
+    const p = i >= path.length - 1 ? path[path.length - 1] : path[i] * (1 - f) + path[i + 1] * f;
+    const y = floor + 12 + lane * G.laneH;
+    roundRect(X(p - M.paddle_half), y, X(p + M.paddle_half) - X(p - M.paddle_half), 8, 4);
+    if (n === "best possible") { ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke(); }
+    else { ctx.fillStyle = col; ctx.fill(); }
+    if (t >= 0) {
+      const k = Math.min(Math.floor(t), M.rows - 1), g = b.pred[n][k];
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(X(g), floor - 8); ctx.lineTo(X(g), floor); ctx.stroke();
+    }
+    if (t >= M.landing_row) {
+      ctx.fillStyle = b.caught[n] ? css("--good") : css("--bad");
+      ctx.fillText(b.caught[n] ? "✓" : "✗", right - 2 - 10, y + 8);
+    }
+    lane++;
+  }
+  // landing spot
+  if (t >= M.landing_row) {
+    ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(X(b.land), floor); ctx.lineTo(X(b.land), h - 4); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// ---------- side panel
+function panel() {
+  const b = DATA.balls[order[pos]];
+  document.getElementById("ballTitle").innerHTML =
+    `Ball ${pos + 1} of ${order.length} ` + (b.bounce ? `<span class="pill bounce">bounces after commit</span>` : `<span class="pill">no bounce after commit</span>`);
+  const dir = b.vx > 0 ? "right" : "left";
+  document.getElementById("ballDesc").innerHTML =
+    `Starts at x = ${b.x0.toFixed(2)}, drifting ${dir} at ${Math.abs(b.vx).toFixed(2)} cells/row. ` +
+    `The neurons get columns <b>(${b.cols.join(", ")})</b>; the ball lands at <b>${b.land.toFixed(2)}</b>` +
+    ` (court is ${M.cols} wide). Readout trial #${b.trial}.`;
+  const head = `<tr><th>readout</th>${b.cols.map((_, k) => `<th>guess after ${k + 1}</th>`).join("")}<th>paddle</th><th></th></tr>`;
+  const rows = MODELS.filter(([n]) => shown[n]).map(([n, v]) => {
+    const done = t >= M.landing_row, path = b.path[n];
+    const cells = b.pred[n].map((g, k) => `<td>${t >= k ? g.toFixed(2) : "·"}</td>`).join("");
+    return `<tr><td><span class="swatch" style="background:${css(v)}"></span> ${n}</td>${cells}` +
+      `<td>${done ? path[path.length - 1].toFixed(2) : "·"}</td>` +
+      `<td>${done ? (b.caught[n] ? '<span class="ok">caught</span>' : '<span class="no">missed</span>') : ""}</td></tr>`;
+  }).join("");
+  document.getElementById("predTable").innerHTML = head + rows;
+  const watched = counted.size;
+  document.getElementById("tally").textContent = watched
+    ? `Watched ${watched} ball${watched > 1 ? "s" : ""}: ` + MODELS.filter(([n]) => shown[n]).map(([n]) => `${n} ${tally[n] || 0}`).join(" · ")
+    : "Press Play. Scores tally as you watch.";
+}
+function models() {
+  document.getElementById("models").innerHTML = MODELS.map(([n, v]) =>
+    `<label><input type="checkbox" data-m="${n}" ${shown[n] ? "checked" : ""}><span class="swatch" style="background:${css(v)}"></span>${n}</label>`).join("");
+  document.querySelectorAll("[data-m]").forEach(el => el.onchange = () => { shown[el.dataset.m] = el.checked; layout(); render(); });
+}
+function summary() {
+  const s = DATA.summary;
+  document.getElementById("summarySub").textContent =
+    `Paddle ${2 * M.paddle_half} of ${M.cols} cells wide, ${M.paddle_speed} cells/row; ball falls ${M.difficulty} rows after the commit point.` +
+    (M.blank_ms != null ? ` Recording blind ${M.blank_ms} ms after each pulse.` : "");
+  const bar = (x, c) => `<td class="bar"><span style="width:${100 * x}%;background:${c}"></span></td><td>${pct(x)}</td>`;
+  document.getElementById("summary").innerHTML =
+    `<tr><th>readout</th><th colspan="2">all balls</th><th colspan="2">bounce after commit</th><th colspan="2">no bounce</th></tr>` +
+    MODELS.map(([n, v]) => `<tr><td><span class="swatch" style="background:${css(v)}"></span> ${n}</td>` +
+      bar(s[n].catch, css(v)) + bar(s[n].catch_bounce, css(v)) + bar(s[n].catch_no_bounce, css(v)) + `</tr>`).join("");
+}
+
+// ---------- playback
+function render() { draw(); panel(); }
+function finish() {
+  const key = order[pos];
+  if (counted.has(key)) return;
+  counted.add(key);
+  for (const [n] of MODELS) tally[n] = (tally[n] || 0) + (DATA.balls[key].caught[n] ? 1 : 0);
+}
+function go(d) { pos = (pos + d + order.length) % order.length; t = -1; render(); }
+function frame(now) {
+  if (!playing) return;
+  const dt = last == null ? 0 : (now - last) / 1000; last = now;
+  t += dt * parseFloat(document.getElementById("speed").value);
+  if (t >= M.landing_row && !counted.has(order[pos])) finish();
+  if (t > M.landing_row + 1.6) { go(1); }
+  render(); requestAnimationFrame(frame);
+}
+document.getElementById("play").onclick = e => {
+  playing = !playing; e.target.textContent = playing ? "Pause" : "Play"; last = null;
+  if (playing) requestAnimationFrame(frame);
+};
+document.getElementById("next").onclick = () => go(1);
+document.getElementById("prev").onclick = () => go(-1);
+document.getElementById("onlyBounce").onchange = e => {
+  order = DATA.balls.map((_, i) => i).filter(i => !e.target.checked || DATA.balls[i].bounce);
+  pos = 0; t = -1; render();
+};
+window.addEventListener("resize", () => { layout(); render(); });
+document.getElementById("toy").style.display = M.toy ? "block" : "none";
+models(); summary(); layout(); render();
+</script>
+</body>
+</html>
