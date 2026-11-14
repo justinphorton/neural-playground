@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reservoir Pong</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script src="/dashboard.js" defer></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Reservoir Pong</h1>
+    <p id="run"></p>
+    <div class="controls">
+      <label>Subreservoir <select id="slot"></select></label>
+      <button id="live">Run live trial</button>
+      <label>Recorded trial <select id="saved"></select></label>
+      <button id="replay">Replay</button>
+    </div>
+    <p id="status" role="status"></p>
+  </header>
+
+  <div class="view">
+    <section>
+      <h2>Court</h2>
+      <label>Controller trace <select id="controller">
+        <option value="neural">Reservoir Ridge</option>
+        <option value="raw">Raw-pulse Ridge</option>
+        <option value="follow">Follow the ball</option>
+      </select></label>
+      <canvas id="court" width="640" height="400" aria-label="Pong court"></canvas>
+      <div class="controls">
+        <button id="play">Play</button>
+        <input id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Scrub simulation">
+        <output id="clock">0.0 ms</output>
+        <select id="speed" aria-label="Playback speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </div>
+      <p id="impact"></p>
+    </section>
+
+    <section>
+      <h2>Pulses and spikes</h2>
+      <p id="pulse-count"></p>
+      <div id="grid"></div>
+      <canvas id="raster" width="640" height="200" aria-label="Spike raster by recording channel"></canvas>
+      <p>Gold bands show when recording is blanked.</p>
+      <p id="features"></p>
+    </section>
+  </div>
+
+  <section>
+    <h2>Controller comparison</h2>
+    <table>
+      <thead><tr><th>Controller</th><th>Landing estimate</th><th>Paddle target</th><th>Paddle center</th><th>Outcome</th></tr></thead>
+      <tbody id="comparison"></tbody>
+    </table>
+    <p id="decision"></p>
+  </section>
+  <section>
+    <h2>Held-out benchmark</h2>
+    <p id="benchmark"></p>
+    <table id="metrics-table">
+      <thead><tr><th>Subreservoir</th><th>Reservoir catch</th><th>Raw-pulse catch</th><th>Opposite-side gain</th></tr></thead>
+      <tbody id="metrics"></tbody>
+    </table>
+    <p id="controls"></p>
+  </section>
+  <section>
+    <h2>Calibration</h2>
+    <p id="calibration"></p>
+  </section>
+</main>
+</body>
+</html>
