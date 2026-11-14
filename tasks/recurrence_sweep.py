@@ -41,14 +41,21 @@ TRIAL_MS = 80
 DELAYS = [5, 10, 20, 40]
 
 
-def settings(excs=(1, 3, 10, 30), inhs=(1, 0.3), include_raw=True):
-    """(name, base loader, weight overrides). Weights are set as multiples of livn's tuned values."""
+def settings(excs=(1, 3, 10, 30), inhs=(1, 0.3), include_raw=True, nmda=None):
+    """(name, base loader, weight overrides). Weights are set as multiples of livn's tuned values.
+
+    nmda: if given, the slow NMDA synapses get this multiple and `excs` scales only the fast
+    AMPA synapses (NMDA is the classic driver of self-sustaining activity)."""
     out = [("raw (what every task uses)", "model", {})] if include_raw else []
     for exc in excs:
         for inh in inhs:
             w = {k: TUNED[k] * exc for k in EXC}
+            label = f"excitation x{exc}"
+            if nmda is not None:
+                w["EXC_EXC-dend-NMDA-weight"] = TUNED["EXC_EXC-dend-NMDA-weight"] * nmda
+                label = f"AMPA x{exc}, NMDA x{nmda}"
             w.update({k: TUNED[k] * inh for k in INH})
-            out.append((f"raw + tuned weights, excitation x{exc}, inhibition x{inh}", "model", w))
+            out.append((f"raw + tuned weights, {label}, inhibition x{inh}", "model", w))
     return out
 
 
@@ -102,9 +109,10 @@ def main():
     parser.add_argument("--out", default="recurrence_sweep.json")
     parser.add_argument("--cells", type=int, default=300)
     parser.add_argument("--trial-ms", type=int, default=TRIAL_MS)
+    parser.add_argument("--nmda", type=float, default=None, help="scale NMDA separately; --exc then scales AMPA only")
     args = parser.parse_args()
     REPS = args.reps
-    grid = settings(args.exc, args.inh, include_raw=args.exc == [1, 3, 10, 30])
+    grid = settings(args.exc, args.inh, include_raw=args.exc == [1, 3, 10, 30], nmda=args.nmda)
     t0 = int(N.PULSE_MS)
     labels = np.repeat(np.arange(16), REPS)
     cv = StratifiedKFold(5, shuffle=True, random_state=0)

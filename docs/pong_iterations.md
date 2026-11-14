@@ -27,6 +27,7 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 13 | Bigger boosted culture: 1,000 neurons, x30 (`--cells 1000`) | Yes | **No** (53% vs 52%) | No: cut-connections control also 53% |
 | 14 | Far-apart XOR on the boosted culture (`tasks/xor_far.py`) | Yes | **Yes**, 98–100% vs 75% | Yes, but it's a latch: one pulse locks the network "on" for good |
 | 15 | Looking for the edge below the latch, x12–x18 (`recurrence_sweep.py --trial-ms 300`) | Yes | n/a: no setting passed, Pong not run | — |
+| 16 | Boosting inhibition too, to stop the latch | Yes | n/a: no setting passed, Pong not run | — |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec's task is a valid test (a line fails while a flexible decoder succeeds). But no version beats the line, because this simulated culture forgets a pulse within about 2 ms and its only interaction comes from single cells, not the network.
 
@@ -245,8 +246,24 @@ Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, l
 - **Runs?** Yes. **Passes?** No. The change is a cliff, not a slope: between x14 and x16 the network jumps from "forgets in a few ms" to "locks on for good". There is no setting in between with lasting, fading memory. So Pong wasn't run on any of them.
 - **Why, most likely:** only the excitatory connections were turned up. Once a burst starts, nothing stops it. In real cortex, inhibitory neurons stop bursts. The next run boosts inhibition along with excitation (in progress).
 
+## 16. Boosting inhibition too, to stop the latch
+
+- **What:** section 15's guess was that nothing stops a burst once it starts. So inhibition was boosted along with excitation. 1,000 neurons, 300 ms trials, same pass rule.
+
+| Excitation | Inhibition | Latched after one pulse | Ignites with no pulse | Memory at 5 / 10 / 20 / 40 ms |
+|---|---|---|---|---|
+| x20 | x3 | 100% | 0% | 38% / 15% / 19% / 29% |
+| x20 | x10 | 92% | 0% | 24% / 6% / 16% / 12% |
+| x20 | x30 | 28% | 0% | 14% / 6% / 8% / 8% |
+| x30 | x3 | 100% | **40%** | 68% / 60% / 47% / 13% |
+| x30 | x10 | 100% | 5% | 52% / 36% / 42% / 23% |
+| x30 | x30 | 100% | 5% | 21% / 14% / 20% / 17% |
+
+- **Runs?** Yes. **Passes?** No. Inhibition strong enough to stop the latch (x20 with x30) also erases the memory. At x30 excitation, even x30 inhibition doesn't stop the latch. So there's still no setting where activity echoes and then fades.
+- **What that suggests:** the latch isn't simply excitation outrunning inhibition. Each excitatory connection has a fast synapse (AMPA, a few ms) and a slow one (NMDA, about 100 ms), and so far both were boosted together. Slow NMDA currents are the textbook mechanism for self-sustaining "on" states. Next: boost only the fast AMPA synapses (in progress).
+
 ## What's left to try
 
-1. **Balance it with inhibition:** boost excitation x20–x30 *and* inhibition x3–x30, so a burst can echo and then be stopped. Same pass rule as section 15 (in progress).
+1. **Boost only the fast synapses:** AMPA x30–x100 with NMDA left at x1 or removed (`recurrence_sweep.py --nmda`). Same pass rule (in progress).
 2. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
 3. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.
