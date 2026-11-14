@@ -21,6 +21,7 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 7 | Team spec, no blind phase | Yes | **No** (ties the line) | No |
 | 8 | Network benchmark (`tasks/network_bench.py`) | Yes | n/a: measures the network | Explains 5–7 |
 | 9 | Neuron-level memory check | Yes | n/a | Confirms 8 |
+| 10 | Software reservoir sweep (`tasks/pong_reservoir_sweep.py`) | Yes | **Yes**, by up to +21 points | Yes: needs recurrence (control: no recurrence ties the line) |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec's task is a valid test (a line fails while a flexible decoder succeeds). But no version beats the line, because this simulated culture forgets a pulse within about 2 ms and its only interaction comes from single cells, not the network.
 
@@ -105,9 +106,29 @@ To rule out our recording (spikes counted per electrode) as the cause, memory wa
 
 The network goes silent about 2 ms after a pulse. It's the simulated culture, not the code or the recording. The memory that does exist is *hidden*: neurons still recovering from a pulse fire less when pulsed again, so only a second pulse on the same neurons can read it.
 
+## 10. Software reservoir sweep: what would a network need? (`tasks/pong_reservoir_sweep.py`)
+
+- **What:** the same falling-ball game, grid and pulse rule as the team spec, but the pulses drive a software echo state network (300 units) instead of the livn culture. Its memory and mixing are adjustable, so we can see what a network must have for a line on it to beat the line on the raw pulse history. Memory is measured the same way as for the culture: pulse one of 16 cells, then decode which one, some milliseconds later (2 ms per game frame).
+- **Result (medium difficulty, 600 test balls, mean and range over 5 random networks):**
+
+| Reservoir | Memory | Landing side correct | vs line on history (52%) |
+|---|---|---|---|
+| No recurrence (units don't connect) | gone after 2 ms | 52% | ties |
+| Weak recurrence (radius 0.5) | about 8–16 ms | 54% | ties |
+| Recurrence 0.9 | the whole 24+ ms window | 64% (61–67%) | +12 |
+| **Recurrence 1.1** | the whole 24+ ms window | **71% (69–73%)** | **+19** |
+| **Recurrence 1.3** | the whole 24+ ms window | **73% (72–74%)** | **+21** |
+| Slow leaky memory (20–40 ms), any recurrence | long | 54–57% | ties |
+
+Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, line 67%) and 70% (hard, line 51%).
+
+- **Runs?** Yes. **Beats the line?** Yes, by up to 21 points, consistently across random networks. **Network gets credit?** Yes: the same reservoir without recurrence ties the line.
+- **What it means:** the team spec's Pong *can* show a reservoir doing real work, but only if the network keeps stimulus-specific activity for the whole fall (24+ ms here) and mixes it through strong recurrent connections. Slow, smooth fading alone doesn't help; it blurs the trajectory.
+- **Why the livn culture failed:** it behaves exactly like the no-recurrence reservoir: perfect memory for 2 ms, then nothing, and its connections barely matter (section 8).
+- **A concrete requirement for real cultures:** to play this Pong, a culture must keep activity that still says *where* it was stimulated for roughly 25 ms or more, carried by its connections. That's a measurable property to ask Archean about, or to test with Lily's cue-then-probe task on a real dish.
+
 ## What's left to try
 
 1. **Use the hidden memory on purpose:** pulses that must combine should hit shared neurons, or a probe pulse should read the recovery state.
-2. **A software reservoir with adjustable memory,** to measure how much memory the spec's Pong needs, which gives a concrete requirement for real cultures.
-3. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
-4. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.
+2. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
+3. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.
