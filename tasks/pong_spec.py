@@ -143,15 +143,23 @@ class MillisecondCounts(Decoding):
                                     for ch in env.io.channel_ids]).astype(np.uint8)}
 
 
+def set_frame_ms(frame_ms):
+    """Change neural time per game frame (and the trial length that follows from it)."""
+    global FRAME_MS, TRIAL_MS
+    FRAME_MS = frame_ms
+    TRIAL_MS = int(START_MS + COMMIT * FRAME_MS + 7)
+
+
 def _simulate(job):
-    stream, trains, weights = job
+    stream, trains, weights, frame_ms, n_cells = job
+    set_frame_ms(frame_ms)  # worker processes re-import this module, so pass these along
     env = Env(predefined("EI", download_directory=DATA_DIR))
-    env.selection(N_CELLS, method="patch")
+    env.selection(n_cells, method="patch")
     env.init().apply_model_defaults()
     if weights:  # optional connection strengths (see --exc-scale)
         env.set_params(weights)
     env.reseed_noise(stream=stream)
-    encoding, decoding = BallEncoding(), MillisecondCounts()
+    encoding, decoding = BallEncoding(), MillisecondCounts(duration=TRIAL_MS)
     out = []
     for train in trains:
         env.clear()
@@ -164,7 +172,7 @@ def simulate(trains, weights=None):
     chunks = [trains[k::WORKERS] for k in range(WORKERS)]
     base = random.randint(10**6, 10**8)
     with ProcessPoolExecutor(max_workers=WORKERS) as pool:
-        parts = list(pool.map(_simulate, [(base + k * 100_000, c, weights) for k, c in enumerate(chunks)]))
+        parts = list(pool.map(_simulate, [(base + k * 100_000, c, weights, FRAME_MS, N_CELLS) for k, c in enumerate(chunks)]))
     counts = np.zeros((len(trains), 128, TRIAL_MS), dtype=np.uint8)
     for k, part in enumerate(parts):
         counts[k::WORKERS] = np.array(part)
@@ -210,6 +218,7 @@ def line(X, y, train, test):
 # 5. MAIN
 # ===========================================================================
 def main():
+    global N_CELLS
     parser = argparse.ArgumentParser()
     parser.add_argument("--width", type=float, default=2.0)
     parser.add_argument("--balls", type=int, default=N_BALLS)
@@ -217,7 +226,12 @@ def main():
                         help="set excitatory connections to this multiple of livn's tuned EI values")
     parser.add_argument("--inh-scale", type=float, default=1.0)
     parser.add_argument("--silence", action="store_true", help="set every connection to zero (control)")
+    parser.add_argument("--frame-ms", type=float, default=FRAME_MS,
+                        help="neural time per game frame (5 suits the balanced culture, see docs/pong_iterations.md section 7)")
+    parser.add_argument("--n-cells", type=int, default=N_CELLS, help="neurons in the simulated patch")
     args = parser.parse_args()
+    set_frame_ms(args.frame_ms)
+    N_CELLS = args.n_cells
     weights, tag = None, ""
     if args.exc_scale is not None or args.silence:
         tuned = json.load(open(os.path.join(DATA_DIR, "systems", "graphs", "EI", "params", "default.json")))
@@ -228,6 +242,10 @@ def main():
         is_ = 0.0 if args.silence else args.inh_scale
         weights = {k: tuned[k] * es for k in exc} | {k: tuned[k] * is_ for k in inh}
         tag = "_silenced" if args.silence else f"_exc{args.exc_scale:g}_inh{args.inh_scale:g}"
+    if args.frame_ms != 2.0:
+        tag += f"_frame{args.frame_ms:g}ms"
+    if args.n_cells != 300:
+        tag += f"_n{args.n_cells}"
     os.makedirs(OUT_DIR, exist_ok=True)
 
     xs = make_balls(args.width, args.balls)

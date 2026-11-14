@@ -18,8 +18,9 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 4 | Probe pulse to read the culture's hidden memory | `tasks/pong_probe.py` | Yes | **No** | No |
 | 5 | Boosted culture: connections x30 | `pong_spec.py --exc-scale 30` | Yes | **No** (ties) | No |
 | 6 | Seven ways of delivering the ball (encoding sweep) | not committed (see section 6) | Yes | **No** (all tie) | No |
+| 7 | **Balanced culture: 1,000 neurons, connections x14, inhibition x4** | `pong_spec.py --n-cells 1000 --exc-scale 14 --inh-scale 4 --frame-ms 5` | Yes | **Yes** at medium, by 6–9 points | **Yes**: gone when connections are cut |
 
-**Bottom line:** the game, encoding, readout and controls all work, and the team spec is a valid test: a line fails at medium difficulty while a flexible decoder succeeds. A software reservoir with strong recurrence beats the line, so the task *can* reward a network. But the livn culture never beats the line. By default it forgets a pulse within about 2 ms. With its connections boosted, it locks "on" after the ball's first pulse instead of keeping a fading memory.
+**Bottom line:** the game, encoding, readout and controls all work, and the team spec is a valid test: a line fails at medium difficulty while a flexible decoder succeeds. A software reservoir with strong recurrence beats the line, so the task *can* reward a network. The default livn culture never beats the line: it forgets a pulse within about 2 ms, and with only its excitatory connections boosted it locks "on" instead. Section 7 is the first design where the culture does beat the line and loses that gain when its connections are cut: a bigger patch (1,000 neurons) with excitation **and** inhibition boosted together.
 
 **Note for the team:** every task file calls `apply_model_defaults()` ("standard tuned weights"), but for the `EI` culture that loads nothing; livn only ships built-in defaults for EI1–EI4. The tuned values load only through `apply_default_params()`, and the two give very different cultures (0.71 vs 0.02 Hz background firing per neuron). All results here use `apply_model_defaults()`, like the rest of the repo.
 
@@ -111,7 +112,7 @@ Easy and hard show the same pattern: 76% (line 67%) and 70% (line 51%).
 | **Boosted culture + line** | **64%** | 50% | 50% |
 
 - **Runs?** Yes. **Beats the line?** No: at medium, 55% equals the cut-connections control. **Network gets credit?** No.
-- **Why:** a closer look showed the boosted culture doesn't hold a fading memory. One pulse locks the whole network "on", and it stays on. So the ball's first pulse flips it, and every later frame lands on a saturated network. Boosted versions with 1,000 neurons and with stronger inhibition behaved the same: either the network locks on, or it forgets within a few ms.
+- **Why:** a closer look showed the boosted culture doesn't hold a fading memory. One pulse locks the whole network "on", and it stays on. So the ball's first pulse flips it, and every later frame lands on a saturated network. The first tries at 1,000 neurons with stronger inhibition behaved the same; section 7 is the balance that finally worked.
 - **Partial win:** with the blind phase, the boosted culture keeps 64% on easy balls, where the default culture falls to chance. Its information travels in later, network-driven spikes that the blind phase doesn't delete. That matters for real hardware, where the blind phase is unavoidable.
 
 ## 6. Encoding sweep: seven ways of delivering the ball
@@ -132,6 +133,35 @@ Easy and hard show the same pattern: 76% (line 67%) and 70% (line 51%).
 - **Runs?** Yes. **Beats the line?** No: shuffled labels already reach 49–57%, and every design sits inside that band. **Network gets credit?** No: cutting every connection never changes the score.
 - **Why:** a flexible decoder on the raw input still gets 89–96% in every design, so the answer is always in the input. The culture just never turns it into something a line can read. Shorter frames squeeze the whole fall into its memory and still don't help, and the echo keeps activity going (99 pulses per ball instead of 7) but only replays where the ball has been. So the limit is the simulated culture, not the encoding.
 
+## 7. Balanced culture: 1,000 neurons, connections x14, inhibition x4
+
+- **What:** a 300-neuron patch keeps only about 2 excitatory connections per excitatory neuron, so in sections 2–6 cutting every connection never changed a score: any gain came from single neurons getting "tired" after being pulsed, not from the network. To find a culture whose connections actually carry memory, a separate memory test was run first (Takahashi-style: each step one of two electrodes is pulsed at random; a line reads back the pulse from 1–8 steps ago, and the XOR of the last two, which needs the network to mix past and present). Each culture was run next to a copy with its connections cut. Only one family had memory that survives the 2 ms blind phase **and** disappears when connections are cut: 1,000 neurons with excitatory connections x10–20 and inhibition x3–8 (relative to livn's tuned values). Boosting excitation alone (section 5) locks the network on; boosting both keeps it balanced. x14 / x4 was picked from that test **before** running Pong.
+
+| Memory test, 5 ms steps, 2 ms blind phase | 1 step back | 2 back | XOR of last two |
+|---|---|---|---|
+| 300 neurons, default | +1% | +2% | +1% |
+| 1,000 neurons, default | +1% | +2% | +1% |
+| **1,000 neurons, exc x14, inh x4** | **+45%** | **+12%** | **+27%** |
+| same, connections cut | +2% | +3% | +0% |
+
+(accuracy above chance on held-out steps)
+
+- **Pong, medium difficulty** (the level where a line on the raw input is near chance but a flexible decoder gets 89%, so it is the level that can show a network helping). Landing side correct, 4,000 balls, tested on the last 30%:
+
+| Medium | Line on pulse history | Balanced culture + line | Connections cut | Shuffled labels |
+|---|---|---|---|---|
+| 5 ms frames | 55% | **64%** | 53% | 49% |
+| 5 ms frames, 2 ms blind phase | 55% | **61%** | 50% | — |
+| Spec's 2 ms frames | 55% | **61%** | 55% | 52% |
+| Spec's 2 ms frames, 2 ms blind phase | 55% | **57%** | 53% | — |
+| 2,000 neurons, 5 ms frames, 2 ms blind phase | 52% | **60%** | 51% | 53% |
+
+- **Runs?** Yes. **Beats the line?** Yes, by 6–9 points, replicated with fresh noise and with 2,000 neurons. **Network gets credit?** Yes: the same neurons with connections cut fall to the line or below.
+- **Why it works:** the balanced network keeps activity that says where it was pulsed for 2–3 steps, in spikes that arrive after the blind phase, and it mixes successive pulses (XOR +27%). That is the ingredient design 3 (software reservoir) said Pong needs.
+- **Limits:** this is a tuned simulation: x14 the tuned excitatory weight is a big change, and too much (x20 / x8) gets noisy and loses the win. 5 ms frames suit this culture better than the spec's 2 ms. Easy and hard were checked once (5 ms, blind phase): easy ties the line (67% vs 67%), since a line already solves most easy balls; hard gains only +3 (54% vs 51%), and 2,000 neurons don't change that, so hard would need a longer memory.
+- **General lesson:** a culture beating the line is not enough on its own. Run the same neurons with every connection cut. In my own earlier experiments, gains that looked real stayed exactly the same with the connections cut, so they came from single neurons, not the network.
+
 ## What's next
 
-1. **Real cultures.** The key open question is whether a real dish keeps stimulus-specific activity for about 25 ms or more (design 3). If it does, the team spec is ready to show it. Sections 5 and 6 rule out fixing this through the input or by simply boosting the connections.
+1. **Focus on medium.** It is the one level where a line fails but the network can help. Easy is solved by a line already, and hard needs more memory than this culture has.
+2. **Real cultures.** Does a real dish keep stimulus-specific activity across a few frames (section 7's memory test can be run on one)? If it does, the team spec is ready to show it.
