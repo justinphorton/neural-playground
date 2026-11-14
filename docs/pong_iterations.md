@@ -17,6 +17,7 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 3 | Software reservoir in place of the culture | `tasks/pong_reservoir_sweep.py` | Yes | **Yes**, by up to +21 points | Yes: needs recurrence |
 | 4 | Probe pulse to read the culture's hidden memory | `tasks/pong_probe.py` | Yes | **No** | No |
 | 5 | Boosted culture: connections x30 | `pong_spec.py --exc-scale 30` | Yes | **No** (ties) | No |
+| 6 | Seven ways of delivering the ball (encoding sweep) | not committed (see section 6) | Yes | **No** (all tie) | No |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec is a valid test: a line fails at medium difficulty while a flexible decoder succeeds. A software reservoir with strong recurrence beats the line, so the task *can* reward a network. But the livn culture never beats the line. By default it forgets a pulse within about 2 ms. With its connections boosted, it locks "on" after the ball's first pulse instead of keeping a fading memory.
 
@@ -113,7 +114,24 @@ Easy and hard show the same pattern: 76% (line 67%) and 70% (line 51%).
 - **Why:** a closer look showed the boosted culture doesn't hold a fading memory. One pulse locks the whole network "on", and it stays on. So the ball's first pulse flips it, and every later frame lands on a saturated network. Boosted versions with 1,000 neurons and with stronger inhibition behaved the same: either the network locks on, or it forgets within a few ms.
 - **Partial win:** with the blind phase, the boosted culture keeps 64% on easy balls, where the default culture falls to chance. Its information travels in later, network-driven spikes that the blind phase doesn't delete. That matters for real hardware, where the blind phase is unavoidable.
 
+## 6. Encoding sweep: seven ways of delivering the ball
+
+- **What:** if the culture's memory is too short, maybe a different input fits it better. Seven genuinely different ways of delivering the same balls were tried, on the default culture, each with a cut-connections run as a control. The baseline is always a line on exactly the input that design delivered, so no design can win by handing the neurons extra information. Runs were done on Modal (2,000 balls, 600 held out); the scripts are not committed, since none won.
+- **Result (medium difficulty, landing side correct):**
+
+| Design | Line on delivered input | Electrodes + line | Every neuron + line | Every neuron, connections cut | Shuffled labels |
+|---|---|---|---|---|---|
+| Team spec (reference) | 52% | 55% | 58% | 57% | 57% |
+| Overlapping position code (neighbours pulsed at 0.5–1x) | 52% | 53–54% | — | 55–56% (electrodes) | 52–56% |
+| Shorter frames (0.5 / 1 ms) | 52% | 53% / 57% | — | 52% / 56% (electrodes) | 56% |
+| Pulse the ball's cell every frame | 52% | 53% | 53% | 54% | 51% |
+| Graded population code across the row | 61% | 55% | 61% | 59% | 54% |
+| Each pulse as a burst of 3 | 53% | 53% | 57% | 56% | 56% |
+| Closed-loop echo (recorded spikes re-pulsed) | 52% | 53% | 56% | 56% | 49% |
+
+- **Runs?** Yes. **Beats the line?** No: shuffled labels already reach 49–57%, and every design sits inside that band. **Network gets credit?** No: cutting every connection never changes the score.
+- **Why:** a flexible decoder on the raw input still gets 89–96% in every design, so the answer is always in the input. The culture just never turns it into something a line can read. Shorter frames squeeze the whole fall into its memory and still don't help, and the echo keeps activity going (99 pulses per ball instead of 7) but only replays where the ball has been. So the limit is the simulated culture, not the encoding.
+
 ## What's next
 
-1. **Real cultures.** The key open question is whether a real dish keeps stimulus-specific activity for about 25 ms or more (design 3). If it does, the team spec is ready to show it.
-2. **Find the culture's limit on this task.** Run the team spec with shorter frames (0.5–1 ms), so the whole fall fits inside the culture's short memory. If the culture beats the line there, its memory is the limit, and we have a number to ask of a real culture.
+1. **Real cultures.** The key open question is whether a real dish keeps stimulus-specific activity for about 25 ms or more (design 3). If it does, the team spec is ready to show it. Sections 5 and 6 rule out fixing this through the input or by simply boosting the connections.
