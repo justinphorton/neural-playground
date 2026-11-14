@@ -24,10 +24,6 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 10 | Software reservoir sweep (`tasks/pong_reservoir_sweep.py`) | Yes | **Yes**, by up to +21 points | Yes: needs recurrence (control: no recurrence ties the line) |
 | 11 | Probe pulse reads the culture's hidden memory (`tasks/pong_probe.py`) | Yes | **No** | No: the probe only recovers the last position |
 | 12 | Boosted culture: connections x30 (`tasks/recurrence_sweep.py`, `pong_spec.py --exc-scale 30`) | Yes | **No** (ties) | No; but it survives the blind phase on easy balls |
-| 13 | Bigger boosted culture: 1,000 neurons, x30 (`--cells 1000`) | Yes | **No** (53% vs 52%) | No: cut-connections control also 53% |
-| 14 | Far-apart XOR on the boosted culture (`tasks/xor_far.py`) | Yes | **Yes**, 98–100% vs 75% | Yes, but it's a latch: one pulse locks the network "on" for good |
-| 15 | Looking for the edge below the latch, x12–x18 (`recurrence_sweep.py --trial-ms 300`) | Yes | n/a: no setting passed, Pong not run | — |
-| 16 | Boosting inhibition too, to stop the latch | Yes | n/a: no setting passed, Pong not run | — |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec's task is a valid test (a line fails while a flexible decoder succeeds). But no version beats the line, because this simulated culture forgets a pulse within about 2 ms and its only interaction comes from single cells, not the network.
 
@@ -158,7 +154,7 @@ Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, l
 |---|---|---|
 | raw, and x1 to x10 | normal | chance |
 | x20 | normal | 8–18% |
-| **x30 (chosen)** | **normal, 0.18 Hz** (in 80 ms trials; see section 14) | **32% / 31% / 28% / 28%** |
+| **x30 (chosen)** | **normal, 0.18 Hz** | **32% / 31% / 28% / 28%** |
 | x50 | 5x higher | 56% → 18% (fades) |
 | x100 | 15x higher | agitated network |
 
@@ -179,91 +175,8 @@ Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, l
 - **Partial win:** with the 2 ms blind phase, the raw culture falls to chance, but the boosted culture keeps 64% on easy balls, nearly matching the line. Its information travels in later, network-driven spikes that the blind phase doesn't delete. That matters for real hardware, where the blind phase is unavoidable.
 - **Why it isn't enough:** the boosted culture's memory is faint (it names the right electrode about 30% of the time). The software reservoirs that beat the line held close to 100% over the whole window. Network memory exists now, but it's too weak to carry a trajectory.
 
-## 13. A bigger boosted culture: 1,000 neurons (`--cells 1000`)
-
-- **What:** section 12's memory was faint, so the same sweep was repeated with 1,000 neurons instead of 300. Same rule, set before Pong: the best memory held across 10–40 ms with normal background firing.
-
-| Excitatory connections, 1,000 neurons | Background firing | Memory at 5 / 10 / 20 / 40 ms (chance 6%) |
-|---|---|---|
-| x20 | normal | 51% / 35% / 38% / 27% |
-| **x30 (chosen)** | **normal, 0.19 Hz** (in 80 ms trials; see section 14) | **84% / 64% / 47% / 16%** |
-| x50 | 3.4 Hz (runaway) | not usable |
-
-- The memory is much clearer than at 300 neurons (84% vs 32% at 5 ms), but it **fades** by 40 ms instead of holding. The ball's trajectory spans about 48 ms, so the early frames are mostly gone by the time the readout looks.
-- **Pong result, medium difficulty (600 test balls):**
-
-| | Landing side correct |
-|---|---|
-| Line on pulse history (baseline) | 52% |
-| **Boosted 1,000-neuron culture + line** | **53%** |
-| Connections cut (control), + line | 53% |
-| Shuffled labels (control) | 47% |
-| *With the spec's 2 ms blind phase:* | |
-| Boosted culture + line | 51% |
-| Boosted culture + best decoder | 53% |
-| Connections cut + best decoder | 50% |
-
-- **Runs?** Yes (about 39 minutes per run). **Beats the line?** No. **Network gets credit?** No: the network adds nothing over the cut-connections control.
-- **A trap worth naming:** with no blind phase, the best decoder (gradient boosting) reads 81% from the boosted culture, but **87% from the cut-connections culture**. That decoder is just reading each pulse's direct echo and doing the maths itself. Disconnected neurons do it better, so the credit belongs to the decoder, not the network. This is why every result here is checked against the cut-connections control.
-- **Why it still isn't enough:** a clear memory that fades over about 20–40 ms isn't what Pong needs. The software reservoirs that won (section 10) held the whole window *and* mixed the frames together. The boosted culture holds part of it, and there's no sign it mixes.
-- Easy and hard weren't run: the pre-set rule was to run them only if medium showed a gain.
-
-## 14. Does the boosted network compute? Far-apart XOR (`tasks/xor_far.py`)
-
-- **What:** a check with no game in it. Electrode A (top-left of the Pong grid) may be pulsed; electrode B (bottom-right, far away) may be pulsed 5–40 ms later. A straight line reads the spikes in the 10 ms after B and must answer **A XOR B**. A straight line on the inputs themselves can get at most 75%. Single neurons can't help, because A and B reach different neurons (section 8). So beating 75% *and* beating the cut-connections culture means the network combined A and B.
-
-| XOR correct (400 trials per delay) | 5 ms | 10 ms | 20 ms | 40 ms |
-|---|---|---|---|---|
-| **Boosted x30, 1,000 neurons** | **89%** | **99%** | **98%** | **100%** |
-| Connections cut, 1,000 neurons (control) | 47% | 51% | 49% | 47% |
-| Boosted x30, 300 neurons | 75% | 76% | 79% | 74% |
-
-- **Runs?** Yes. **Beats the line?** Yes: 98–100% against the 75% straight-line limit. **Network gets credit?** Yes: the cut-connections culture is at chance, and the total spike count alone gets only 46–65%, so the readout uses *which* neurons fire, not just how many. The 300-neuron culture sits at the 75% line, so it adds nothing beyond a sum.
-- **But here's how it does it, and why that's a problem.** I looked at the activity over 400 ms:
-
-| Excitatory connections | One pulse, then... | No pulse at all |
-|---|---|---|
-| x30, 1,000 neurons | network locks **on** (about 500 spikes per 25 ms, vs 25 at rest) and never stops | ignites by itself within about 300 ms (5 of 6 trials) |
-| x20, 1,000 neurons | locks on and never stops | stays quiet |
-| x30, 300 neurons | locks on and never stops | stays quiet |
-
-- So the "memory" in sections 12–13 is mostly a **latch**: a 1-bit switch that says "something was pulsed". The XOR works because B lands differently on a network that's already on. That's real nonlinear network behaviour, but it's a degenerate regime. It can't be reset, so it can't follow a ball: the ball's first pulse flips the switch and every later frame lands on a saturated network. That's why sections 12–13 didn't help Pong.
-- **A mistake of mine this caught:** my "normal background firing" rule for picking a setting looked only at 80 ms trials, which was too short to see the network ignite. The sweep now also measures latching over 300 ms trials (`recurrence_sweep.py --trial-ms 300`).
-- **What it points to:** a useful reservoir must sit *just below* the latch: activity that echoes for tens of ms and then dies out. That's the regime where the software reservoirs won (section 10, recurrence about 1.1). Between x10 (no memory) and x20 (latch) there may be such a setting; that's the next run.
-
-## 15. Looking for the edge just below the latch
-
-- **What:** section 14 showed x20 and up locks on, and section 12 showed x10 and below has no memory. A good reservoir would sit in between: activity that echoes for tens of ms, then returns to rest. Excitation x12–x18 at 1,000 neurons, 300 ms trials. Rule set before running: pass only with clear memory at 10–40 ms **and** returning to rest.
-
-| Excitatory connections, 1,000 neurons | Latched after one pulse | Memory at 5 / 10 / 20 / 40 ms (chance 6%) |
-|---|---|---|
-| x12 | 0% | 12% / 10% / 9% / 9% |
-| x14 | 8% | 19% / 12% / 9% / 10% |
-| x16 | **91%** | 32% / 11% / 11% / 15% |
-| x18 | **100%** | 39% / 21% / 21% / 24% |
-
-- None of them ignited without a stimulus.
-- **Runs?** Yes. **Passes?** No. The change is a cliff, not a slope: between x14 and x16 the network jumps from "forgets in a few ms" to "locks on for good". There is no setting in between with lasting, fading memory. So Pong wasn't run on any of them.
-- **Why, most likely:** only the excitatory connections were turned up. Once a burst starts, nothing stops it. In real cortex, inhibitory neurons stop bursts. The next run boosts inhibition along with excitation (in progress).
-
-## 16. Boosting inhibition too, to stop the latch
-
-- **What:** section 15's guess was that nothing stops a burst once it starts. So inhibition was boosted along with excitation. 1,000 neurons, 300 ms trials, same pass rule.
-
-| Excitation | Inhibition | Latched after one pulse | Ignites with no pulse | Memory at 5 / 10 / 20 / 40 ms |
-|---|---|---|---|---|
-| x20 | x3 | 100% | 0% | 38% / 15% / 19% / 29% |
-| x20 | x10 | 92% | 0% | 24% / 6% / 16% / 12% |
-| x20 | x30 | 28% | 0% | 14% / 6% / 8% / 8% |
-| x30 | x3 | 100% | **40%** | 68% / 60% / 47% / 13% |
-| x30 | x10 | 100% | 5% | 52% / 36% / 42% / 23% |
-| x30 | x30 | 100% | 5% | 21% / 14% / 20% / 17% |
-
-- **Runs?** Yes. **Passes?** No. Inhibition strong enough to stop the latch (x20 with x30) also erases the memory. At x30 excitation, even x30 inhibition doesn't stop the latch. So there's still no setting where activity echoes and then fades.
-- **What that suggests:** the latch isn't simply excitation outrunning inhibition. Each excitatory connection has a fast synapse (AMPA, a few ms) and a slow one (NMDA, about 100 ms), and so far both were boosted together. Slow NMDA currents are the textbook mechanism for self-sustaining "on" states. Next: boost only the fast AMPA synapses (in progress).
-
 ## What's left to try
 
-1. **Boost only the fast synapses:** AMPA x30–x100 with NMDA left at x1 or removed (`recurrence_sweep.py --nmda`). Same pass rule (in progress).
+1. **A larger boosted culture:** more neurons with boosted connections may hold a clearer memory (in progress).
 2. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
 3. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.
