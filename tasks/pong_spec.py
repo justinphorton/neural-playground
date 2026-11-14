@@ -144,9 +144,9 @@ class MillisecondCounts(Decoding):
 
 
 def _simulate(job):
-    stream, trains, weights = job
+    stream, trains, weights, cells = job
     env = Env(predefined("EI", download_directory=DATA_DIR))
-    env.selection(N_CELLS, method="patch")
+    env.selection(cells, method="patch")
     env.init().apply_model_defaults()
     if weights:  # optional connection strengths (see --exc-scale)
         env.set_params(weights)
@@ -160,11 +160,11 @@ def _simulate(job):
     return out
 
 
-def simulate(trains, weights=None):
+def simulate(trains, weights=None, cells=N_CELLS):
     chunks = [trains[k::WORKERS] for k in range(WORKERS)]
     base = random.randint(10**6, 10**8)
     with ProcessPoolExecutor(max_workers=WORKERS) as pool:
-        parts = list(pool.map(_simulate, [(base + k * 100_000, c, weights) for k, c in enumerate(chunks)]))
+        parts = list(pool.map(_simulate, [(base + k * 100_000, c, weights, cells) for k, c in enumerate(chunks)]))
     counts = np.zeros((len(trains), 128, TRIAL_MS), dtype=np.uint8)
     for k, part in enumerate(parts):
         counts[k::WORKERS] = np.array(part)
@@ -217,6 +217,7 @@ def main():
                         help="set excitatory connections to this multiple of livn's tuned EI values")
     parser.add_argument("--inh-scale", type=float, default=1.0)
     parser.add_argument("--silence", action="store_true", help="set every connection to zero (control)")
+    parser.add_argument("--cells", type=int, default=N_CELLS, help="neurons in the simulated patch")
     args = parser.parse_args()
     weights, tag = None, ""
     if args.exc_scale is not None or args.silence:
@@ -228,6 +229,8 @@ def main():
         is_ = 0.0 if args.silence else args.inh_scale
         weights = {k: tuned[k] * es for k in exc} | {k: tuned[k] * is_ for k in inh}
         tag = "_silenced" if args.silence else f"_exc{args.exc_scale:g}_inh{args.inh_scale:g}"
+    if args.cells != N_CELLS:
+        tag += f"_cells{args.cells}"
     os.makedirs(OUT_DIR, exist_ok=True)
 
     xs = make_balls(args.width, args.balls)
@@ -239,7 +242,7 @@ def main():
           f"{TRIAL_MS} ms per trial", flush=True)
 
     started = time.time()
-    counts = simulate(trains, weights)
+    counts = simulate(trains, weights, args.cells)
     print(f"simulated in {(time.time() - started) / 60:.1f} min, "
           f"{counts.sum() / args.balls:.0f} spikes per ball", flush=True)
     np.savez_compressed(os.path.join(OUT_DIR, f"width{args.width:g}{tag}.npz"), counts=counts, xs=xs)

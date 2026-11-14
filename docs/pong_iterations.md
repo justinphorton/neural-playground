@@ -24,6 +24,7 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 10 | Software reservoir sweep (`tasks/pong_reservoir_sweep.py`) | Yes | **Yes**, by up to +21 points | Yes: needs recurrence (control: no recurrence ties the line) |
 | 11 | Probe pulse reads the culture's hidden memory (`tasks/pong_probe.py`) | Yes | **No** | No: the probe only recovers the last position |
 | 12 | Boosted culture: connections x30 (`tasks/recurrence_sweep.py`, `pong_spec.py --exc-scale 30`) | Yes | **No** (ties) | No; but it survives the blind phase on easy balls |
+| 13 | Bigger boosted culture: 1,000 neurons, x30 (`--cells 1000`) | Yes | **No** (53% vs 52%) | No: cut-connections control also 53% |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec's task is a valid test (a line fails while a flexible decoder succeeds). But no version beats the line, because this simulated culture forgets a pulse within about 2 ms and its only interaction comes from single cells, not the network.
 
@@ -175,8 +176,37 @@ Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, l
 - **Partial win:** with the 2 ms blind phase, the raw culture falls to chance, but the boosted culture keeps 64% on easy balls, nearly matching the line. Its information travels in later, network-driven spikes that the blind phase doesn't delete. That matters for real hardware, where the blind phase is unavoidable.
 - **Why it isn't enough:** the boosted culture's memory is faint (it names the right electrode about 30% of the time). The software reservoirs that beat the line held close to 100% over the whole window. Network memory exists now, but it's too weak to carry a trajectory.
 
+## 13. A bigger boosted culture: 1,000 neurons (`--cells 1000`)
+
+- **What:** section 12's memory was faint, so the same sweep was repeated with 1,000 neurons instead of 300. Same rule, set before Pong: the best memory held across 10–40 ms with normal background firing.
+
+| Excitatory connections, 1,000 neurons | Background firing | Memory at 5 / 10 / 20 / 40 ms (chance 6%) |
+|---|---|---|
+| x20 | normal | 51% / 35% / 38% / 27% |
+| **x30 (chosen)** | **normal, 0.19 Hz** | **84% / 64% / 47% / 16%** |
+| x50 | 3.4 Hz (runaway) | not usable |
+
+- The memory is much clearer than at 300 neurons (84% vs 32% at 5 ms), but it **fades** by 40 ms instead of holding. The ball's trajectory spans about 48 ms, so the early frames are mostly gone by the time the readout looks.
+- **Pong result, medium difficulty (600 test balls):**
+
+| | Landing side correct |
+|---|---|
+| Line on pulse history (baseline) | 52% |
+| **Boosted 1,000-neuron culture + line** | **53%** |
+| Connections cut (control), + line | 53% |
+| Shuffled labels (control) | 47% |
+| *With the spec's 2 ms blind phase:* | |
+| Boosted culture + line | 51% |
+| Boosted culture + best decoder | 53% |
+| Connections cut + best decoder | 50% |
+
+- **Runs?** Yes (about 39 minutes per run). **Beats the line?** No. **Network gets credit?** No: the network adds nothing over the cut-connections control.
+- **A trap worth naming:** with no blind phase, the best decoder (gradient boosting) reads 81% from the boosted culture, but **87% from the cut-connections culture**. That decoder is just reading each pulse's direct echo and doing the maths itself. Disconnected neurons do it better, so the credit belongs to the decoder, not the network. This is why every result here is checked against the cut-connections control.
+- **Why it still isn't enough:** a clear memory that fades over about 20–40 ms isn't what Pong needs. The software reservoirs that won (section 10) held the whole window *and* mixed the frames together. The boosted culture holds part of it, and there's no sign it mixes.
+- Easy and hard weren't run: the pre-set rule was to run them only if medium showed a gain.
+
 ## What's left to try
 
-1. **A larger boosted culture:** more neurons with boosted connections may hold a clearer memory (in progress).
+1. **Does the boosted network compute at all?** A task-free check: XOR of two pulses on *far-apart* electrodes, 5–40 ms apart. Single neurons can't do this (section 8), so if the boosted culture beats its cut-connections control here, the network is mixing inputs; if not, Pong on it is hopeless (in progress).
 2. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
 3. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.

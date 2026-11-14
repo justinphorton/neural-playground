@@ -49,11 +49,11 @@ def settings(excs=(1, 3, 10, 30), inhs=(1, 0.3), include_raw=True):
 
 
 def _job(args):
-    loader, weights, stream, trials = args
+    loader, weights, stream, trials, cells = args
     from livn.env import Env
     from livn.system import predefined
     env = Env(predefined("EI", download_directory=N.DATA_DIR))
-    env.selection(300, method="patch")
+    env.selection(cells, method="patch")
     env.init()
     env.apply_model_defaults() if loader == "model" else env.apply_default_params()
     if weights:
@@ -76,12 +76,12 @@ def _job(args):
     return out
 
 
-def run(loader, weights):
+def run(loader, weights, cells=300):
     trials = [None] * 20 + [e for e in N.SCREEN for _ in range(REPS)]
     chunks = [trials[k::N.WORKERS] for k in range(N.WORKERS)]
     base = random.randint(10**6, 10**8)
     with ProcessPoolExecutor(N.WORKERS) as pool:
-        parts = list(pool.map(_job, [(loader, weights, base + k * 100_000, c) for k, c in enumerate(chunks)]))
+        parts = list(pool.map(_job, [(loader, weights, base + k * 100_000, c, cells) for k, c in enumerate(chunks)]))
     C = np.zeros((len(trials), 128, TRIAL_MS))
     for k, part in enumerate(parts):
         C[k::N.WORKERS] = np.array(part)
@@ -96,6 +96,7 @@ def main():
     parser.add_argument("--inh", type=float, nargs="+", default=[1, 0.3])
     parser.add_argument("--reps", type=int, default=REPS)
     parser.add_argument("--out", default="recurrence_sweep.json")
+    parser.add_argument("--cells", type=int, default=300)
     args = parser.parse_args()
     REPS = args.reps
     grid = settings(args.exc, args.inh, include_raw=args.exc == [1, 3, 10, 30])
@@ -105,9 +106,9 @@ def main():
     rows = []
     print(f"{'setting':50s}{'spont Hz':>9s}{'late':>7s}  memory: " + "  ".join(f"{d}ms" for d in DELAYS), flush=True)
     for name, loader, weights in grid:
-        C = run(loader, weights)
+        C = run(loader, weights, args.cells)
         spont, mem = C[:20], C[20:]
-        spont_hz = spont.sum() / 20 / 300 / (TRIAL_MS / 1000)
+        spont_hz = spont.sum() / 20 / args.cells / (TRIAL_MS / 1000)
         late = mem[:, :, t0 + 5:t0 + 40].sum((1, 2)).mean() - spont[:, :, t0 + 5:t0 + 40].sum((1, 2)).mean()
         accs = []
         for d in DELAYS:
