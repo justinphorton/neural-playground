@@ -22,6 +22,7 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 8 | Network benchmark (`tasks/network_bench.py`) | Yes | n/a: measures the network | Explains 5–7 |
 | 9 | Neuron-level memory check | Yes | n/a | Confirms 8 |
 | 10 | Software reservoir sweep (`tasks/pong_reservoir_sweep.py`) | Yes | **Yes**, by up to +21 points | Yes: needs recurrence (control: no recurrence ties the line) |
+| 11 | Probe pulse reads the culture's hidden memory (`tasks/pong_probe.py`) | Yes | **No** | No: the probe only recovers the last position |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec's task is a valid test (a line fails while a flexible decoder succeeds). But no version beats the line, because this simulated culture forgets a pulse within about 2 ms and its only interaction comes from single cells, not the network.
 
@@ -127,8 +128,25 @@ Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, l
 - **Why the livn culture failed:** it behaves exactly like the no-recurrence reservoir: perfect memory for 2 ms, then nothing, and its connections barely matter (section 8).
 - **A concrete requirement for real cultures:** to play this Pong, a culture must keep activity that still says *where* it was stimulated for roughly 25 ms or more, carried by its connections. That's a measurable property to ask Archean about, or to test with Lily's cue-then-probe task on a real dish.
 
+## 11. Probe pulse: reading the culture's hidden memory (`tasks/pong_probe.py`)
+
+- **What:** the culture's spikes forget a pulse within 2 ms, but neurons hit recently are still recovering and respond less to a new pulse (the effect XOR and Lily's `memory_task.py` use). So at the commit point, fire a probe on all 16 grid electrodes at once. Its response should be weaker wherever the ball passed recently, turning the hidden memory back into spikes. Same balls, grid, baseline and split as the team spec.
+- **Result (landing side correct, 600 test balls):**
+
+| | Easy | Medium | Hard |
+|---|---|---|---|
+| Line on pulse history (baseline) | 67% | 52% | 51% |
+| Neurons before the probe | 63% | 55% | 53% |
+| **Probe response only** | **54%** | **51%** | **52%** |
+| Both | 64% | 54% | 54% |
+| Shuffled-label control | 50% | 51% | 49% |
+
+- **Runs?** Yes; the probe triggers about 60 spikes per ball. **Beats the line?** No. **Neurons get credit?** No.
+- **Why:** the probe does read the hidden memory, but only about where the ball *just* was. When the ball's last pulse came at most 6 ms before the probe, the probe response tells its column 83% of the time (chance 34%); when the last pulse was earlier, only 51% (chance 30%). Predicting the landing spot needs the ball's *trajectory* (direction and speed over several positions), and the baseline already has the exact last position. A memory of one recent position, lasting about 6 ms, adds nothing a line on the pulses doesn't already know.
+- **Lesson:** hidden single-cell memory can be read out on demand, but it is too short and too local to hold a trajectory. That matches section 10: what's needed is memory carried through connections.
+
 ## What's left to try
 
-1. **Use the hidden memory on purpose:** pulses that must combine should hit shared neurons, or a probe pulse should read the recovery state.
+1. **Make the culture recurrent:** turn its connection strengths up and check, with the task-free benchmark, whether activity then keeps saying where it started (in progress).
 2. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
 3. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.
