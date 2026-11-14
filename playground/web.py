@@ -200,18 +200,17 @@ class Lab:
         fresh_noise(self.env)
 
         # The task's inputs, written as the pulses its encoding would deliver
-        label = getattr(task, "input_label", str)  # a task may name its inputs, e.g. "paper v rock"
         self.presets = [
-            {"label": label(x), "input": list(x), "answer": int(task.target(x)),
+            {"label": str(x), "input": list(x), "answer": int(task.target(x)),
              "pulses": [[float(t), int(ch), float(self.encoding.amplitude_ua)]
                         for t, ch in self.encoding.pulses(x)]}
             for x in task.INPUTS
         ]
 
-        # Timeline rows: the electrodes the task uses, then a few strong neighbours (at least 4 rows)
+        # Timeline rows: the electrodes the task uses, then a few strong neighbours
         self.used = sorted({pulse[1] for p in self.presets for pulse in p["pulses"]})
         extra = [ch for ch in task.strongest_electrodes(self.env, n=6) if ch not in self.used]
-        self.rows = (self.used + extra)[:max(4, len(self.used))]
+        self.rows = (self.used + extra)[:4]
 
         # Where our neurons and electrodes sit in the dish (micrometers)
         gids = set(int(g) for g in self.env.simulated_gids())
