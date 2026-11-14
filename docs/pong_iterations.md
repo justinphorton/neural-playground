@@ -23,6 +23,7 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 9 | Neuron-level memory check | Yes | n/a | Confirms 8 |
 | 10 | Software reservoir sweep (`tasks/pong_reservoir_sweep.py`) | Yes | **Yes**, by up to +21 points | Yes: needs recurrence (control: no recurrence ties the line) |
 | 11 | Probe pulse reads the culture's hidden memory (`tasks/pong_probe.py`) | Yes | **No** | No: the probe only recovers the last position |
+| 12 | Boosted culture: connections x30 (`tasks/recurrence_sweep.py`, `pong_spec.py --exc-scale 30`) | Yes | **No** (ties) | No; but it survives the blind phase on easy balls |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec's task is a valid test (a line fails while a flexible decoder succeeds). But no version beats the line, because this simulated culture forgets a pulse within about 2 ms and its only interaction comes from single cells, not the network.
 
@@ -145,8 +146,37 @@ Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, l
 - **Why:** the probe does read the hidden memory, but only about where the ball *just* was. When the ball's last pulse came at most 6 ms before the probe, the probe response tells its column 83% of the time (chance 34%); when the last pulse was earlier, only 51% (chance 30%). Predicting the landing spot needs the ball's *trajectory* (direction and speed over several positions), and the baseline already has the exact last position. A memory of one recent position, lasting about 6 ms, adds nothing a line on the pulses doesn't already know.
 - **Lesson:** hidden single-cell memory can be read out on demand, but it is too short and too local to hold a trajectory. That matches section 10: what's needed is memory carried through connections.
 
+## 12. A boosted culture: turning the connections up (`tasks/recurrence_sweep.py`)
+
+- **What:** section 10 showed Pong needs memory carried by connections, and in the default culture the connections do almost nothing. So the excitatory connection strengths were turned up, and each setting was measured with no game: background firing, extra spikes after a pulse, and whether activity 5–40 ms later still says which of 16 electrodes was pulsed. The setting was chosen **before** running Pong, by this rule: the best memory held across 10–40 ms with normal background firing.
+
+| Excitatory connections (x livn's tuned values) | Background firing | Memory at 5 / 10 / 20 / 40 ms (chance 6%) |
+|---|---|---|
+| raw, and x1 to x10 | normal | chance |
+| x20 | normal | 8–18% |
+| **x30 (chosen)** | **normal, 0.18 Hz** | **32% / 31% / 28% / 28%** |
+| x50 | 5x higher | 56% → 18% (fades) |
+| x100 | 15x higher | agitated network |
+
+- At x30 the culture finally behaves like a recurrent network: a pulse triggers about 80 extra spikes that spread through the network, and they still say where they started 40 ms later. It's the first stimulus-specific memory beyond 2 ms seen in livn. **Caveat:** x30 is far above livn's tuned values, so this is a deliberately boosted culture, not a realistic default.
+- **Pong result (landing side correct, 600 test balls):**
+
+| | Easy | Medium | Hard |
+|---|---|---|---|
+| Line on pulse history (baseline) | 67% | 52% | 51% |
+| Raw culture + line | 66% | 52% | 56% |
+| **Boosted culture + line** | **66%** | **55%** | **52%** |
+| Connections cut (control) | — | 55% | — |
+| *With the spec's 2 ms blind phase:* | | | |
+| Raw culture + line | 53% | 51% | 49% |
+| **Boosted culture + line** | **64%** | 50% | 50% |
+
+- **Runs?** Yes. **Beats the line?** No: at medium the boosted culture's 55% equals the cut-connections control and is within noise of the line. **Network gets credit?** No.
+- **Partial win:** with the 2 ms blind phase, the raw culture falls to chance, but the boosted culture keeps 64% on easy balls, nearly matching the line. Its information travels in later, network-driven spikes that the blind phase doesn't delete. That matters for real hardware, where the blind phase is unavoidable.
+- **Why it isn't enough:** the boosted culture's memory is faint (it names the right electrode about 30% of the time). The software reservoirs that beat the line held close to 100% over the whole window. Network memory exists now, but it's too weak to carry a trajectory.
+
 ## What's left to try
 
-1. **Make the culture recurrent:** turn its connection strengths up and check, with the task-free benchmark, whether activity then keeps saying where it started (in progress).
+1. **A larger boosted culture:** more neurons with boosted connections may hold a clearer memory (in progress).
 2. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
 3. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.
