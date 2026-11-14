@@ -26,6 +26,7 @@ All runs use livn 2.0.0 and the `EI` culture, 300-neuron patch, unless stated. S
 | 12 | Boosted culture: connections x30 (`tasks/recurrence_sweep.py`, `pong_spec.py --exc-scale 30`) | Yes | **No** (ties) | No; but it survives the blind phase on easy balls |
 | 13 | Bigger boosted culture: 1,000 neurons, x30 (`--cells 1000`) | Yes | **No** (53% vs 52%) | No: cut-connections control also 53% |
 | 14 | Far-apart XOR on the boosted culture (`tasks/xor_far.py`) | Yes | **Yes**, 98–100% vs 75% | Yes, but it's a latch: one pulse locks the network "on" for good |
+| 15 | Looking for the edge below the latch, x12–x18 (`recurrence_sweep.py --trial-ms 300`) | Yes | n/a: no setting passed, Pong not run | — |
 
 **Bottom line:** the game, encoding, readout and controls all work, and the team spec's task is a valid test (a line fails while a flexible decoder succeeds). But no version beats the line, because this simulated culture forgets a pulse within about 2 ms and its only interaction comes from single cells, not the network.
 
@@ -229,8 +230,23 @@ Easy and hard levels show the same pattern: the best reservoir gets 76% (easy, l
 - **A mistake of mine this caught:** my "normal background firing" rule for picking a setting looked only at 80 ms trials, which was too short to see the network ignite. The sweep now also measures latching over 300 ms trials (`recurrence_sweep.py --trial-ms 300`).
 - **What it points to:** a useful reservoir must sit *just below* the latch: activity that echoes for tens of ms and then dies out. That's the regime where the software reservoirs won (section 10, recurrence about 1.1). Between x10 (no memory) and x20 (latch) there may be such a setting; that's the next run.
 
+## 15. Looking for the edge just below the latch
+
+- **What:** section 14 showed x20 and up locks on, and section 12 showed x10 and below has no memory. A good reservoir would sit in between: activity that echoes for tens of ms, then returns to rest. Excitation x12–x18 at 1,000 neurons, 300 ms trials. Rule set before running: pass only with clear memory at 10–40 ms **and** returning to rest.
+
+| Excitatory connections, 1,000 neurons | Latched after one pulse | Memory at 5 / 10 / 20 / 40 ms (chance 6%) |
+|---|---|---|
+| x12 | 0% | 12% / 10% / 9% / 9% |
+| x14 | 8% | 19% / 12% / 9% / 10% |
+| x16 | **91%** | 32% / 11% / 11% / 15% |
+| x18 | **100%** | 39% / 21% / 21% / 24% |
+
+- None of them ignited without a stimulus.
+- **Runs?** Yes. **Passes?** No. The change is a cliff, not a slope: between x14 and x16 the network jumps from "forgets in a few ms" to "locks on for good". There is no setting in between with lasting, fading memory. So Pong wasn't run on any of them.
+- **Why, most likely:** only the excitatory connections were turned up. Once a burst starts, nothing stops it. In real cortex, inhibitory neurons stop bursts. The next run boosts inhibition along with excitation (in progress).
+
 ## What's left to try
 
-1. **Find the edge just below latching:** excitation x12–x18 at 1,000 neurons, picking a setting by memory at 10–40 ms *and* return to rest within 300 ms. Run Pong only if one passes (in progress).
+1. **Balance it with inhibition:** boost excitation x20–x30 *and* inhibition x3–x30, so a burst can echo and then be stopped. Same pass rule as section 15 (in progress).
 2. **Longer pulses or pulse trains,** to see whether they drive network activity that lasts.
 3. **Real cultures** may have much longer memory than this simulator. That is the biggest open question for Archean.
