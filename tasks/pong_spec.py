@@ -144,10 +144,12 @@ class MillisecondCounts(Decoding):
 
 
 def _simulate(job):
-    stream, trains = job
+    stream, trains, weights = job
     env = Env(predefined("EI", download_directory=DATA_DIR))
     env.selection(N_CELLS, method="patch")
     env.init().apply_model_defaults()
+    if weights:  # optional connection strengths (see --exc-scale)
+        env.set_params(weights)
     env.reseed_noise(stream=stream)
     encoding, decoding = BallEncoding(), MillisecondCounts()
     out = []
@@ -158,11 +160,11 @@ def _simulate(job):
     return out
 
 
-def simulate(trains):
+def simulate(trains, weights=None):
     chunks = [trains[k::WORKERS] for k in range(WORKERS)]
     base = random.randint(10**6, 10**8)
     with ProcessPoolExecutor(max_workers=WORKERS) as pool:
-        parts = list(pool.map(_simulate, [(base + k * 100_000, c) for k, c in enumerate(chunks)]))
+        parts = list(pool.map(_simulate, [(base + k * 100_000, c, weights) for k, c in enumerate(chunks)]))
     counts = np.zeros((len(trains), 128, TRIAL_MS), dtype=np.uint8)
     for k, part in enumerate(parts):
         counts[k::WORKERS] = np.array(part)
@@ -211,7 +213,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--width", type=float, default=2.0)
     parser.add_argument("--balls", type=int, default=N_BALLS)
+    parser.add_argument("--exc-scale", type=float, default=None,
+                        help="set excitatory connections to this multiple of livn's tuned EI values")
+    parser.add_argument("--inh-scale", type=float, default=1.0)
+    parser.add_argument("--silence", action="store_true", help="set every connection to zero (control)")
     args = parser.parse_args()
+    weights, tag = None, ""
+    if args.exc_scale is not None or args.silence:
+        tuned = json.load(open(os.path.join(DATA_DIR, "systems", "graphs", "EI", "params", "default.json")))
+        tuned = tuned["ReducedCalciumSomaDendrite"]["default"]["params"]
+        exc = ["EXC_EXC-dend-AMPA-weight", "EXC_EXC-dend-NMDA-weight"]
+        inh = ["EXC_INH-soma-GABA_A-weight", "INH_EXC-soma-AMPA-weight"]
+        es = 0.0 if args.silence else args.exc_scale
+        is_ = 0.0 if args.silence else args.inh_scale
+        weights = {k: tuned[k] * es for k in exc} | {k: tuned[k] * is_ for k in inh}
+        tag = "_silenced" if args.silence else f"_exc{args.exc_scale:g}_inh{args.inh_scale:g}"
     os.makedirs(OUT_DIR, exist_ok=True)
 
     xs = make_balls(args.width, args.balls)
@@ -223,10 +239,10 @@ def main():
           f"{TRIAL_MS} ms per trial", flush=True)
 
     started = time.time()
-    counts = simulate(trains)
+    counts = simulate(trains, weights)
     print(f"simulated in {(time.time() - started) / 60:.1f} min, "
           f"{counts.sum() / args.balls:.0f} spikes per ball", flush=True)
-    np.savez_compressed(os.path.join(OUT_DIR, f"width{args.width:g}.npz"), counts=counts, xs=xs)
+    np.savez_compressed(os.path.join(OUT_DIR, f"width{args.width:g}{tag}.npz"), counts=counts, xs=xs)
 
     X = response_features(counts, trains)
     H = history_features(trains)
@@ -249,7 +265,7 @@ def main():
         print(f"{name:36s}{r['side']:>7.0%}{r['opposite_side']:>10.0%}{r['catch']:>7.0%}{r['error']:>7.2f}")
     r_prev = float(np.corrcoef(line(X, prev, train, test), prev[test])[0, 1])
     print(f"\nCONTROL decoding the previous ball, correlation: {r_prev:.2f} (expected about 0)")
-    with open(os.path.join(OUT_DIR, f"width{args.width:g}.json"), "w") as f:
+    with open(os.path.join(OUT_DIR, f"width{args.width:g}{tag}.json"), "w") as f:
         json.dump({"results": results, "previous_ball_r": r_prev, "pulses_per_ball": float(np.mean([len(t) for t in trains]))}, f, indent=2)
 
 
