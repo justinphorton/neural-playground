@@ -8,7 +8,7 @@
 - **With idealized recording, the reservoir helps a little.** It scores 72% vs. 60% for the linear baselines, and beats all 30 shuffled-label controls. Accuracy rises as more pulses arrive (60% → 62% → 72%), so the rows are interacting in the network. The gain is about 2–3 more of the 20 input patterns correct.
 - **There's no gain on exact landing position.** Error is 0.93 cells for the reservoir vs. 0.92 for the linear baseline, and both catch 28–29% of balls.
 - **The most important finding: the default simulated culture has almost no network activity after a pulse.** 96% of spikes come within 2 ms of a pulse, from neurons the electrode fires directly. A real rig is blind for about 2 ms after each pulse, so in the realistic case the readout sees about 3 spikes per ball and scores 38%. This probably applies to the XOR and memory tasks too.
-- **Turning on NMDA and strengthening synapses restores network activity, but not much useful signal.** The best realistic setting (300 neurons, stronger synapses, two electrodes per column) scores 58% with the 2 ms blind window: above chance, but below the 61% baseline. A 1,000-neuron network with even more activity scored 53%, within chance, probably because its activity runs on regardless of the input.
+- **Turning on NMDA, strengthening synapses and balancing inhibition restores network activity, but not useful signal (sections 4–5).** The best realistic setting (300 neurons, stronger synapses, two electrodes per column) scores 58% with the 2 ms blind window: above chance, but below the 61% baseline. A 1,000-neuron network with even more activity scored 53%, within chance, probably because its activity runs on regardless of the input.
 
 ## The task
 
@@ -100,6 +100,24 @@ At 300 neurons, synapse strength barely matters until it's very high, because th
 - Stronger synapses give the realistic recording something to read: 58% is above chance, but still below the linear baseline.
 - More activity didn't help. The 1,000-neuron network has 14× more spikes surviving the blind window, but they carry less information about the ball. It's likely in the runaway regime, where activity is driven by the network itself rather than the input.
 
+## 5. Balancing inhibition and adding a 4th row (300 balls each)
+
+*November 16.* All runs: 300 neurons, two electrodes per column, recorded once and scored with and without the 2 ms blind window. Inhibitory cells receive only 131 excitatory synapses in the patch (`INH_EXC-soma-AMPA-weight`, default 7), so inhibition can't keep up when excitation grows. These runs strengthen that input 4×.
+
+| Setting | Spikes per ball (no blind / 2 ms) | Reservoir, no blind | Reservoir, 2 ms blind | Shuffled 95th pct. (2 ms) | One-hot baseline | In-game, 2 ms (ceiling) |
+|---|---|---|---|---|---|---|
+| AMPA 50, NMDA 20 (reference) | 103 / 28 | 72% | 58% | 56% | 66% | 53% (76%) |
+| + inhibitory input ×4 | 105 / 28 | 72% | 59% | 53% | 66% | 54% (76%) |
+| AMPA 70, NMDA 30, + inhibitory input ×4 | 208 / 127 | 70% | 58% | 54% | 66% | 54% (76%) |
+| 4 rows (4 ms apart), AMPA 50, NMDA 20, + inhibitory input ×4 | 138 / 39 | 74% | 49% | 55% | 72% | 50% (81%) |
+
+- **Balancing inhibition stops the runaway but doesn't add information.** The strong network now keeps 127 spikes per ball through the blind window, 4× more than the reference, yet accuracy stays at 58%.
+- **With the blind window, no setting beats the linear baseline.** All of them sit at or just above chance.
+- **A 4th row hurt.** It raises the best possible in-game score from 76% to 81% and the baseline to 72%, but with the blind window the reservoir falls to chance. Caveat: 38 patterns × 8 repeats leaves few training trials per pattern.
+- The one-hot baseline reads 60% at 1,000 balls but 66% at 300 balls (same task). That's the 20-pattern noise again: compare settings within a table, not across tables.
+
+**What this says:** extra activity after the blind window is mostly the network's own dynamics, not information about where the ball was. The ball's information is carried by the first ~2 ms of direct response, which a real rig can't record. Getting past this probably needs a different kind of input, not a stronger network. For example: stimulate electrodes *away from* the recording ones, so the readout only sees activity that travelled through the network; or encode position in pulse timing or strength rather than which electrode fires.
+
 ## Caveats
 
 - Everything here is simulation. Real cultures do produce network responses lasting tens to hundreds of ms, so the default livn culture probably understates what a dish would do.
@@ -120,8 +138,10 @@ At 300 neurons, synapse strength barely matters until it's very high, because th
 python tasks/pong_game.py                 # difficulty sweep, seconds, no neurons
 python tasks/pong_task.py                 # section 1 (defaults), ~25 min; saves pong_trials.npz
 python tasks/pong_landing.py              # landing + paddle + replay page, seconds
-python tasks/pong_screen.py s300 300 50 20 2 25      # section 4, ~6 min on 2 cores
-python tasks/pong_screen.py n1000 1000 35 15 2 25    # ~21 min on 2 cores
+python tasks/pong_screen.py s300 300 '{"EXC_EXC-dend-AMPA-weight": 50, "EXC_EXC-dend-NMDA-weight": 20}' 2 25     # section 4, ~6 min
+python tasks/pong_screen.py n1000 1000 '{"EXC_EXC-dend-AMPA-weight": 35, "EXC_EXC-dend-NMDA-weight": 15}' 2 25   # ~21 min
+python tasks/pong_screen.py ei4 300 '{"EXC_EXC-dend-AMPA-weight": 50, "EXC_EXC-dend-NMDA-weight": 20, "INH_EXC-soma-AMPA-weight": 28}' 2 15   # section 5, ~3.5 min
+python tasks/pong_screen.py rows4 300 '{"EXC_EXC-dend-AMPA-weight": 50, "EXC_EXC-dend-NMDA-weight": 20, "INH_EXC-soma-AMPA-weight": 28}' 2 8 4 4 4   # 4 rows
 ```
 
 Settings for section 4 live at the top of `pong_task.py`: `N_CELLS`, `WEIGHTS`, `ELECTRODES_PER_COLUMN`, `BLANK_MS`.
