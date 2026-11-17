@@ -45,8 +45,8 @@ import pong_task as task
 
 # ======================================================== SETTINGS
 N_TEST_BALLS = 4000  # real balls played against the test-pool trials
-PADDLE_HALF = 0.5  # paddle half-width in cells: catches if |paddle - ball| <= this (paddle = 1 of 4 cells)
-PADDLE_SPEED = 0.5  # cells per row: after the commit point it can cover DIFFICULTY * this
+PADDLE_HALF = task.N_COLS / 8  # paddle half-width in cells: the paddle is 1/4 of the court wide
+PADDLE_SPEED = task.N_COLS / 8  # cells per row (1/8 of the court): after the commit it covers DIFFICULTY * this
 N_REPLAY = 60  # balls exported to the replay page (half of them bounce after the commit)
 TABLE_BALLS = 400_000  # game balls used to build the best-possible lookup table
 SEED = 1
