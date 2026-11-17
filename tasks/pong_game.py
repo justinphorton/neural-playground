@@ -32,8 +32,10 @@ SEED = 0
 
 
 # ======================================================== GAME
-def fold(x, width=N_COLS):
-    """Position after bouncing off walls at 0 and `width` (a triangle wave)."""
+def fold(x, width=None):
+    """Position after bouncing off walls at 0 and `width` (a triangle wave). Width defaults to
+    N_COLS at call time, so changing N_COLS (as pong_task.py does) widens the court."""
+    width = N_COLS if width is None else width
     m = np.mod(x, 2 * width)
     return np.where(m <= width, m, 2 * width - m)
 
